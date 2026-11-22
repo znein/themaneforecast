@@ -1,0 +1,21 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+cache/
+
+# --- secrets (secrets-manager skill) ---
+# Real values never enter git. Templates (*.example) do, so a fresh clone shows what to fill in.
+.env
+.env.*
+!.env.example
+**/secret/*
+**/secrets/*
+!**/secret/*.example
+!**/secret/*.example.*
+!**/secrets/*.example
+!**/secrets/*.example.*
+*.pem
+*.key
+*.p12
+_site/
