@@ -64,6 +64,7 @@
   }
   function renderWeek() {
     $("week").hidden = false;
+    $("days").style.setProperty("--days", ctx.days.length);  // 7 by day, 8 at night: no empty column
     $("days").innerHTML = ctx.days.map(function (d, i) {
       var r = M.compareDay(ctx, d).range, spread = "";
       if (r.high) spread = '<span class="day-spread" title="Highest temperature, across every source"><span class="dot ' + (r.high[1] - r.high[0] <= 3 ? "agree" : "split") + '" aria-hidden="true"></span>' +
