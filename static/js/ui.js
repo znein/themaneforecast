@@ -151,7 +151,7 @@
       '<section class="dd-section"><h3>How the sources compare <span>' + esc(x.window) + '</span></h3><div class="table-box"><table class="compare"><thead><tr><th scope="col">Source</th>' +
       (hasHigh ? '<th scope="col">High</th>' : "") + '<th scope="col">Low</th><th scope="col">Rain</th><th scope="col">Chance</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
       (c.sources.some(function (s) { return s.partial; }) ? '<p class="footnote">* Partial: that source\'s forecast doesn\'t cover every hour of this day.</p>' : "") + "</section>" +
-      '<p class="nws-text">' + d.parts.map(function (p) { return "<b>" + esc(p.name) + ":</b> " + esc(p.text); }).join(" ") + "</p>" +
+      '<div class="nws-text">' + d.parts.map(function (p) { return "<p><b>" + esc(p.name) + ":</b> " + esc(p.text) + "</p>"; }).join("") + "</div>" +
       '<section class="dd-section"><h3>Temperature <span>every source · °F' + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature from every source"></canvas></div></section>' +
       (x.showRain ? '<section class="dd-section"><h3>Rain <span>chance each hour · NWS bars, models lines</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
         (x.rainBlocks.length ? '<ul class="amounts" aria-label="NWS rain amounts">' + amounts(x.rainBlocks, "", 2) + "</ul>" : "") + "</section>" : "") +
