@@ -89,15 +89,22 @@
     var grid = point.then(function (p) { return getJSON(p.forecastGridData); }).then(function (g) {
       var out = {}; GRID_KEYS.forEach(function (k) { if (g.properties[k]) out[k] = g.properties[k]; }); return out;
     });
+    var alerts = getJSON(NWS + "/alerts/active?point=" + lat + "," + lon).then(function (a) {
+      return (a.features || []).map(function (f) {
+        var p = f.properties;
+        return { id: p.id, event: p.event, severity: p.severity, headline: p.headline || "", description: p.description || "",
+          instruction: p.instruction || "", startMs: Date.parse(p.onset || p.effective), endMs: Date.parse(p.ends || p.expires) };
+      });
+    });
     return Promise.all([settle(forecast), settle(grid), settle(getJSON(modelsURL(lat, lon))),
-      settle(getJSON(N.forecastURL(lat, lon))), N.nwsHourly(lat, lon)]).then(function (r) {
+      settle(getJSON(N.forecastURL(lat, lon))), N.nwsHourly(lat, lon), settle(alerts)]).then(function (r) {
       if (!r[0].ok) throw new Error("The National Weather Service didn't answer (" + r[0].err + ").");
       var errors = [];  // plain names for the page's "didn't answer" note
       if (!r[1].ok) errors.push("The NWS hourly forecast");
       if (!r[2].ok || !r[3].ok) errors.push(!r[2].ok && !r[3].ok ? "Open-Meteo (the weather models and the blanket data)"
         : !r[2].ok ? "Open-Meteo's weather models" : "Open-Meteo's blanket data");
       return { at: Date.now(), lat: lat, lon: lon, forecast: r[0].ok, grid: r[1].ok || null, models: r[2].ok || null,
-        om: r[3].ok || null, nwsHourly: r[4], errors: errors };
+        om: r[3].ok || null, nwsHourly: r[4], alerts: r[5].ok || [], errors: errors };
     });
   }
   // Calls back with (bundle, stale) once from the cache if it's fresh, otherwise after fetching.
@@ -167,7 +174,9 @@
       day.showChance = day.chance >= MIN_CHANCE;
       days.push(day);
     }
-    return days;
+    // Always 7 cards: in the evening NWS's list starts with "Tonight" and ends with a daytime-only
+    // half day; leaving that last half day off keeps the week the same size around the clock.
+    return days.slice(0, 7);
   }
 
   // ---------- NWS: the hourly grid ----------
@@ -340,6 +349,24 @@
     return { hours: hours, models: Object.keys(ctx.M), utcOffsetSeconds: off / 1000 };
   }
 
+  // ---------- NWS alerts for this spot ----------
+  // Colour family the way weather.gov does it: warning red, watch orange, advisory amber, the rest blue.
+  function alertKind(event) {
+    return /warning/i.test(event) ? "warning" : /watch/i.test(event) ? "watch" : /advisory/i.test(event) ? "advisory" : "statement";
+  }
+  function alertWhen(a, off) {
+    var now = Date.now(), from = a.startMs <= now ? "Now" : DOW[barnDate(a.startMs, off).getUTCDay()] + " " + clockMin(a.startMs, off);
+    return isFinite(a.endMs) ? from + (a.startMs <= now ? " until " : " – ") + DOW[barnDate(a.endMs, off).getUTCDay()] + " " + clockMin(a.endMs, off) : from;
+  }
+  function activeAlerts(ctx) {
+    var now = Date.now(), seen = {};
+    return (ctx.bundle.alerts || []).filter(function (a) {
+      if (isFinite(a.endMs) && a.endMs < now) return false;      // expired since it was cached
+      var key = a.event + "|" + a.startMs; if (seen[key]) return false; seen[key] = 1; return true;
+    }).map(function (a) { return Object.assign({ kind: alertKind(a.event), when: alertWhen(a, ctx.off) }, a); })
+      .sort(function (x, y) { return x.startMs - y.startMs; });
+  }
+
   // Everything the page needs from one bundle.
   function context(bundle) {
     var ctx = { bundle: bundle, off: offsetOf(bundle), G: parseGrid(bundle), M: parseModels(bundle) };
@@ -349,5 +376,5 @@
   }
 
   window.Mane = { getPlace: getPlace, setPlace: setPlace, findPlace: findPlace, findHere: findHere, load: load, context: context,
-    compareDay: compareDay, dayDetail: dayDetail, rainHours: rainHours, clock: clock, barnDate: barnDate };
+    compareDay: compareDay, dayDetail: dayDetail, rainHours: rainHours, clock: clock, barnDate: barnDate, activeAlerts: activeAlerts };
 })();

@@ -50,8 +50,10 @@
     $("status").hidden = !notes.length;
     if (notes.length) $("try-now").addEventListener("click", function () { start(true); });
     renderWeek();
+    var alerts = M.activeAlerts(ctx);
+    renderAlerts(alerts);
     if (window.MikeyBlanket) window.MikeyBlanket.render(b);
-    if (window.MikeyGuard) window.MikeyGuard.render(M.rainHours(ctx));
+    if (window.MikeyGuard) window.MikeyGuard.render(Object.assign(M.rainHours(ctx), { alerts: alerts, off: ctx.off }));
   }
 
   // ---------- the week ----------
@@ -80,6 +82,45 @@
         (r.anyRain ? '<span class="day-spread rain" title="Rain total, across every source">Rain ' + fix2(r.rain[0]) + "–" + fix2(r.rain[1]) + " in</span>" : "") +
         '<span class="visually-hidden">Open the hourly forecast for ' + esc(d.title) + "</span></button></li>";
     }).join("");
+  }
+
+  // ---------- NWS alerts: banners, bars over the affected days, and a tag on each day ----------
+  var KIND_RANK = { warning: 4, watch: 3, advisory: 2, statement: 1 };
+  function overlaps(a, d) { return a.startMs < d.endMs && (!isFinite(a.endMs) || a.endMs > d.startMs); }
+  function renderAlerts(alerts) {
+    var box = $("alerts"), bars = $("alert-bars");
+    box.hidden = !alerts.length;
+    box.innerHTML = alerts.map(function (a) {
+      return '<details class="alert alert-' + a.kind + '"><summary><span class="alert-icon" aria-hidden="true"><i class="bi bi-exclamation-triangle-fill"></i></span>' +
+        '<span class="alert-title"><b>' + esc(a.event) + "</b><span>" + esc(a.when) + '</span></span><span class="alert-more">Details</span></summary>' +
+        '<div class="alert-body"><p class="alert-headline">' + esc(a.headline) + "</p>" +
+        (a.description ? '<p class="alert-text">' + esc(a.description) + "</p>" : "") +
+        (a.instruction ? '<p class="alert-text"><b>What to do:</b> ' + esc(a.instruction) + "</p>" : "") +
+        '<p class="alert-fine">From the National Weather Service. Shown while NWS lists it for this spot.</p></div></details>';
+    }).join("");
+    // a bar per alert, spanning the day cards it touches (same columns as the week)
+    bars.style.setProperty("--days", ctx.days.length);
+    var rows = alerts.map(function (a) {
+      var hit = ctx.days.map(function (d, i) { return overlaps(a, d) ? i : -1; }).filter(function (i) { return i >= 0; });
+      return hit.length ? { a: a, from: hit[0], to: hit[hit.length - 1] } : null;
+    }).filter(Boolean);
+    bars.innerHTML = rows.map(function (r, k) {
+      return '<span class="alert-bar alert-' + r.a.kind + '" style="grid-column:' + (r.from + 1) + " / " + (r.to + 2) + ";grid-row:" + (k + 1) + '">' + esc(r.a.event) + "</span>";
+    }).join("");
+    bars.hidden = !rows.length;
+    // the most serious alert touching each day: tinted border and a small tag
+    document.querySelectorAll(".day[data-start-ms]").forEach(function (el) {
+      var d = { startMs: +el.getAttribute("data-start-ms"), endMs: +el.getAttribute("data-end-ms") };
+      var top = alerts.filter(function (a) { return overlaps(a, d); }).sort(function (x, y) { return KIND_RANK[y.kind] - KIND_RANK[x.kind]; })[0];
+      var tag = el.querySelector(".day-alert");
+      if (tag) tag.remove();
+      el.classList.remove("has-warning", "has-watch", "has-advisory", "has-statement");
+      if (!top) return;
+      el.classList.add("has-" + top.kind);
+      var span = document.createElement("span");
+      span.className = "day-alert alert-" + top.kind; span.textContent = top.event;
+      el.insertBefore(span, el.querySelector(".visually-hidden:last-child"));
+    });
   }
 
   // ---------- a day's popup ----------

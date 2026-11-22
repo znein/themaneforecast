@@ -166,10 +166,19 @@
       '<h2 class="guard-head">' + head + "</h2>" +
       '<p class="guard-sub">' + sub + (state === "plan" || state === "night" ? ' <span class="guard-count">in ' + inWords(p.leave - now) + "</span>" : "") + "</p>" +
       (state === "plan" || state === "go" ? timeline(sp, p) : "") +
-      '<ul class="guard-facts">' + chips(sp) + "</ul>" +
+      '<ul class="guard-facts">' + chips(sp) + "</ul>" + also(sp, now) +
       '<div class="guard-actions"><button type="button" class="btn btn-primary" id="guard-done">' + CHECK + " Stall guard is up</button></div></div>";
     $("guard-done").onclick = function () { write(DONE_KEY, { startMs: sp.startMs, endMs: sp.endMs, at: Date.now() }); render(); };
     badges(all, now);
+  }
+
+  // NWS alerts that overlap this trip or the rain itself, as one "Also:" line.
+  function also(sp, now) {
+    var list = (DATA.alerts || []).filter(function (a) { return a.startMs < sp.endMs + 6 * 36e5 && (!isFinite(a.endMs) || a.endMs > now); });
+    if (!list.length) return "";
+    return '<p class="guard-also"><b>Also:</b> ' + list.map(function (a) {
+      return a.event.replace(/[&<>"]/g, "") + " (" + a.when.replace(/[&<>"]/g, "") + ")";
+    }).join("; ") + ". Worth checking his stall on that visit.</p>";
   }
 
   // "Guard by 3 PM" on any forecast day whose window holds the start of a rain spell.

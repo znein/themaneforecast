@@ -384,3 +384,38 @@ nav a:hover { color: var(--text); }
 .cold-explainer p { margin: 0 14px 10px; font-size: 14px; line-height: 1.55; color: #c9d3e3; }
 .cold-explainer p b { color: var(--text); }
 .cold-explainer p.fine { font-size: 12px; color: var(--muted); }
+
+/* NWS alerts: banners (tap for NWS's text), bars over the affected days, and day tags.
+   Colours follow weather.gov: warning red, watch orange, advisory amber, everything else blue. */
+.alert-warning { --a: #e5443a; --a-ink: #ffb3a8; --a-bg: #2e1820; --a-line: #a3485a; --a-on: #fff; }
+.alert-watch { --a: #f28c28; --a-ink: #ffc58f; --a-bg: #2d1f12; --a-line: #a8652a; --a-on: #1f0f00; }
+.alert-advisory { --a: #f0a63a; --a-ink: #ffcf87; --a-bg: #2a2414; --a-line: #9a7426; --a-on: #2a1800; }
+.alert-statement { --a: #4aa8e6; --a-ink: #8fd0ff; --a-bg: #13233a; --a-line: #3f6f9e; --a-on: #04172a; }
+.alerts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.alert { border-radius: 14px; background: var(--a-bg); border: 1px solid var(--a-line); }
+.alert summary { display: flex; align-items: center; gap: 14px; padding: 12px 16px; cursor: pointer; list-style: none; min-height: 44px; }
+.alert summary::-webkit-details-marker { display: none; }
+.alert-icon { flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; background: var(--a); color: var(--a-on); display: flex; align-items: center; justify-content: center; }
+.alert-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.alert-title b { color: var(--a-ink); font-size: 16px; }
+.alert-title span { font-size: 14px; color: #c9d3e3; }
+.alert-more { font-size: 13px; color: var(--muted); }
+.alert[open] .alert-more { color: var(--text); }
+.alert-body { padding: 0 16px 14px 66px; font-size: 14px; line-height: 1.55; color: #c9d3e3; }
+.alert-body p { margin: 0 0 8px; }
+.alert-headline { color: var(--text); }
+.alert-text { white-space: pre-line; }
+.alert-fine { font-size: 12px; color: var(--muted); }
+.alert-bars { display: grid; grid-template-columns: repeat(var(--days, 7), minmax(0, 1fr)); column-gap: 10px; row-gap: 4px; margin-bottom: 6px; }
+.alert-bar { height: 22px; border-radius: 6px; background: var(--a); color: var(--a-on); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; }
+.day.has-warning { border-color: #a3485a; } .day.has-watch { border-color: #a8652a; }
+.day.has-advisory { border-color: #9a7426; } .day.has-statement { border-color: #3f6f9e; }
+.day-alert { font-size: 11px; font-weight: 700; color: var(--a-ink); padding: 1px 8px; border-radius: 999px; background: var(--a-bg); border: 1px solid var(--a-line); }
+.guard-also { margin: 0; font-size: 14px; color: #ffb3a8; }
+@media (max-width: 991.98px) { .alert-bars { display: none; } }
+@media (max-width: 575.98px) {
+  .alert-body { padding-left: 16px; }
+  .day.has-warning { box-shadow: inset 4px 0 0 #e5443a; } .day.has-watch { box-shadow: inset 4px 0 0 #f28c28; }
+  .day.has-advisory { box-shadow: inset 4px 0 0 #f0a63a; } .day.has-statement { box-shadow: inset 4px 0 0 #4aa8e6; }
+  .day-alert { grid-column: 1 / -1; justify-self: start; margin-top: 4px; }
+}
