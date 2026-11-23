@@ -31,6 +31,12 @@ a weather page for Mikey the gray Holsteiner's barn, made for the family.
 - The week is 10 cards: NWS's 7 days, then days 8-10 from the average of the four models
   (`modelDays` in data.js, `WEEK_DAYS = 10`), dashed and tagged "Less certain"; their popup skips
   the NWS-only wind and cloud charts. Set `WEEK_DAYS = 7` to go back to a 7-day week.
+- Blanket time (`blanket_hour`, default 5 PM, in Mikey's settings): the card shows the NWS hourly
+  temperature at blanket time, 9 PM and the low, and whether the night's blanket is fine to put on
+  then (`MAX_OK` + offset, +5°F of slack). The call itself is still Neighcast's, for the whole night.
+- Charts follow weather.gov's hourly graph: the NWS line (models' average past day 7), a time under
+  every third hour and the temperature written above the line at those hours. "Hourly" drop-downs
+  (blanket card from blanket time to 8 AM, and each day popup) list one row per hour via `Mane.hourly`.
 - Personal site: no outbound links beyond the footer's data credits; `noindex` keeps it out of search.
 - Naming: lowercase words joined by underscores. Design: gateopenerguide palette (navy +
   `#5cb8ff`), Fraunces headings, Inter body; phones get one row per day, nothing scrolls sideways.

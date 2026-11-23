@@ -86,14 +86,9 @@
             <ul class="blanket-facts" id="blanket-facts"></ul>
             <p class="blanket-why" id="blanket-why"></p>
             <p class="blanket-sources" id="blanket-sources"></p>
+            <p class="blanket-evening" id="blanket-evening" hidden></p>
             <p class="blanket-off" id="blanket-off" hidden></p>
-            <details class="cold-explainer">
-              <summary>How cold is too cold?</summary>
-              <p>A <b>dry, thick winter coat</b> is excellent insulation. Horses with one don't start burning extra energy to stay warm until about <b>18°F</b> (Rutgers, University of Minnesota).</p>
-              <p><b>Wet changes everything.</b> A wet or thin coat loses most of that protection, closer to <b>59°F</b> (Rutgers), which is why rain moves the call up.</p>
-              <p><b>Most horses in mild climates never grow that coat,</b> so they're blanketed more like clipped horses, which is why Mikey's chart starts the sheet at 60°F. Shelter, plenty of hay and good body condition all help.</p>
-              <p class="fine">General guidance from university extension services, not veterinary advice. Your vet knows Mikey best.</p>
-            </details>
+            <div id="blanket-hourly"></div>
             <p class="blanket-foot"><span id="blanket-for"></span></p>
           </div>
         </div>
@@ -141,6 +136,11 @@
         <label class="range-row" for="comfort"><span><b>Fine-tune (optional):</b> start each blanket <output id="comfort-out">0°</output> warmer</span>
           <input type="range" id="comfort" name="offset" min="0" max="20" step="1" value="0">
           <small>Slide right and every blanket goes on sooner: at 5°, his sheet goes on below 65°F instead of 60°F.</small>
+        </label>
+        <label class="select-row" for="blanket-hour"><span>We usually blanket him at</span>
+          <select id="blanket-hour" name="blanket_hour">
+            <option value="15">3:00 PM</option><option value="16">4:00 PM</option><option value="17">5:00 PM</option><option value="18">6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21">9:00 PM</option>
+          </select>
         </label>
         <div class="bands" aria-live="polite">
           <span class="bands-title">With these settings</span>

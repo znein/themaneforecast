@@ -383,11 +383,6 @@ nav a:hover { color: var(--text); }
 .bands li span:first-child { font-weight: 600; color: var(--lvl); }
 .bands li span:last-child { color: #c9d3e3; }
 .bands-note { font-size: 12px; color: var(--muted); }
-.cold-explainer { margin: 4px 0 10px; border: 1px solid var(--border); border-radius: 14px; background: rgba(11, 15, 21, .35); }
-.cold-explainer summary { cursor: pointer; padding: 10px 14px; font-size: 14px; font-weight: 600; color: #8fd0ff; min-height: 24px; }
-.cold-explainer p { margin: 0 14px 10px; font-size: 14px; line-height: 1.55; color: #c9d3e3; }
-.cold-explainer p b { color: var(--text); }
-.cold-explainer p.fine { font-size: 12px; color: var(--muted); }
 
 /* NWS alerts: banners (tap for NWS's text), bars over the affected days, and day tags.
    Colours follow weather.gov: warning red, watch orange, advisory amber, everything else blue. */
@@ -425,3 +420,29 @@ nav a:hover { color: var(--text); }
 }
 
 @media (max-width: 575.98px) { .day-uncertain { grid-column: 1 / -1; justify-self: start; margin-top: 2px; } }
+
+/* Blanket time line and the "Hourly" drop-downs (blanket card and day popup) */
+.blanket-evening { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.blanket-evening b { color: var(--text); }
+.hourly { margin: 10px 0 0; border: 1px solid var(--border); border-radius: 12px; background: rgba(11, 15, 21, .35); }
+.hourly summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; list-style: none; padding: 10px 14px; min-height: 44px; font-size: 14px; font-weight: 600; color: #8fd0ff; }
+.hourly summary::-webkit-details-marker { display: none; }
+.hourly summary .bi { transition: transform .15s ease; }
+.hourly[open] summary .bi { transform: rotate(180deg); }
+.hour-list { list-style: none; margin: 0; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+.hour { display: grid; grid-template-columns: 6em 1.4em 2.8em 1fr 3.4em 5.6em; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 10px; background: var(--card-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.hour.is-new-day { margin-top: 6px; }
+.hour.is-mark { outline: 1px solid var(--accent); }
+.h-time { color: var(--muted); white-space: nowrap; }
+.h-time small { color: var(--text); font-weight: 600; }
+.h-icon { color: var(--rain); }
+.h-temp { font-weight: 700; font-size: 15px; }
+.h-feels { color: var(--muted); font-size: 12px; }
+.h-pop { color: var(--rain); font-size: 12px; white-space: nowrap; }
+.h-wind { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+.h-wind small { display: block; font-size: 11px; }
+.h-mark { grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+@media (max-width: 575.98px) {
+  .hour { grid-template-columns: 5.6em 1.2em 2.6em 1fr 3em 4.6em; gap: 4px; padding: 7px 6px; }
+}
+
