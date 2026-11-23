@@ -155,7 +155,7 @@
       '<div class="nws-text">' + d.parts.map(function (p) { return "<p><b>" + esc(p.name) + ":</b> " + esc(p.text) + "</p>"; }).join("") + "</div>" +
       '<section class="dd-section"><h3>Temperature <span>' + (hasNws(x.chart) ? "National Weather Service" : "average of the four models") + " · °F" + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature, numbers every 3 hours"></canvas></div>' +
         hourlyHTML(M.hourly(ctx, d.startMs, d.endMs), { title: "Hourly" }) + "</section>" +
-      (x.showRain ? '<section class="dd-section"><h3>Rain <span>chance each hour · NWS bars, models lines</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
+      (x.showRain ? '<section class="dd-section"><h3>Rain <span>inches each hour · NWS bars, models lines · total in the key</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
         (x.rainBlocks.length ? '<ul class="amounts" aria-label="NWS rain amounts">' + amounts(x.rainBlocks, "", 2) + "</ul>" : "") + "</section>" : "") +
       (x.snow.length || x.ice.length ? '<section class="dd-section"><h3>Snow and ice <span>NWS</span></h3><ul class="amounts">' + amounts(x.snow, " snow", 1) + amounts(x.ice, " ice", 2) + "</ul></section>" : "") +
       (d.uncertain ? "" : '<section class="dd-section"><h3>Wind <span>NWS · mph · wind (blue) · gusts (grey, dashed)</span></h3><div class="chart-box"><canvas data-chart="wind" role="img" aria-label="Hourly wind and gusts"></canvas></div></section>' +
@@ -221,9 +221,9 @@
         interaction: { mode: "index", intersect: false },
         elements: { point: { radius: 0, hoverRadius: 4, hitRadius: 8 }, line: { tension: 0.35, borderWidth: 2 } },
         plugins: {
-          legend: { display: datasets.length > 1, position: "bottom", labels: { color: TEXT, usePointStyle: true, boxWidth: 8, boxHeight: 8, font: { size: 11 } } },
+          legend: { display: datasets.length > 1, position: "bottom", labels: { color: TEXT, usePointStyle: true, boxWidth: 8, boxHeight: 8, font: { size: 11 }, sort: function (a, b) { return a.datasetIndex - b.datasetIndex; } } },
           tooltip: { backgroundColor: "rgba(11, 15, 21, 0.94)", borderColor: "#2a3a52", borderWidth: 1, padding: 10, cornerRadius: 10,
-            callbacks: { label: function (i) { return " " + i.dataset.label + ": " + i.formattedValue + (i.dataset.unit || ""); } } }
+            callbacks: { label: function (i) { return " " + i.dataset.label.split(" · ")[0] + ": " + (i.dataset.unit === " in" ? (+i.raw).toFixed(2) : i.formattedValue) + (i.dataset.unit || ""); } } }
         },
         scales: {
           x: { grid: { color: function (c) { return third(c.index) ? GRID : "transparent"; } },
@@ -255,10 +255,16 @@
     var temp = [main];
     if (d.nws.feels) temp.push(line("Feels like (NWS)", d.nws.feels, "#9aa3b5", { borderDash: [5, 4], unit: "°F" }));
     chart("temp", L, temp, { grace: "12%", ticks: { color: TEXT, callback: function (v) { return v + "°"; } } }, true);
-    if (d.nws.pop) {
-      var rain = [{ type: "bar", label: "NWS", data: d.nws.pop, backgroundColor: rgba(SOURCE_COLORS[0], 0.45), unit: "%", order: 2 }];
-      d.models.forEach(function (m, i) { if (m.pop) rain.push(line(m.name, m.pop, SOURCE_COLORS[i + 1], { borderWidth: 1.6, unit: "%", order: 1 })); });
-      chart("rain", L, rain, pct);
+    // Rain: how much and when (inches each hour). The chance stays on the week cards and in the hourly list.
+    if (d.nws.rain) {
+      // same window as the "How the sources compare" table: every hour but the closing one
+      var total = function (a) { return (a || []).slice(0, -1).reduce(function (s, v) { return s + (v || 0); }, 0); };
+      var named = function (n, a) { return n + " · " + total(a).toFixed(2) + " in"; };
+      var rain = [];
+      if (d.nws.rain.some(function (v) { return v != null; }))
+        rain.push({ type: "bar", label: named("NWS", d.nws.rain), data: d.nws.rain, backgroundColor: rgba(SOURCE_COLORS[0], 0.55), unit: " in", order: 2, barPercentage: 1, categoryPercentage: 1 });  // NWS first in the key, as in the table
+      d.models.forEach(function (m, i) { if (m.rain) rain.push(line(named(m.name, m.rain), m.rain, SOURCE_COLORS[i + 1], { borderWidth: 1.6, unit: " in", order: 1, cubicInterpolationMode: "monotone" })); });
+      chart("rain", L, rain, { min: 0, suggestedMax: 0.05, ticks: { color: TEXT, maxTicksLimit: 5, callback: function (v) { return (+v).toFixed(2) + '"'; } } });
     }
     chart("wind", L, [line("Wind", d.nws.wind, SOURCE_COLORS[0], { unit: " mph" }),
       // gusts in grey, so they read apart from the wind

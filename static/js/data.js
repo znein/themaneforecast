@@ -370,9 +370,12 @@
     var types = {}; hours.forEach(function (ms) { (G.types[ms] || []).forEach(function (t) { if (t !== "Thunderstorms") types[t] = 1; }); });
     var models = Object.keys(ctx.M).map(function (name) {
       return { name: name, temp: hours.map(function (ms) { return (ctx.M[name][ms] || {}).temp; }),
-        pop: showRain ? hours.map(function (ms) { return (ctx.M[name][ms] || {}).pop; }) : null };
+        pop: showRain ? hours.map(function (ms) { return (ctx.M[name][ms] || {}).pop; }) : null,
+        rain: showRain ? hours.map(function (ms) { var r = ctx.M[name][ms]; return r ? r.rain : null; }) : null };
     });
     var sum = function (l) { return l.reduce(function (a, x) { return a + x.amount; }, 0); };
+    // NWS gives rain as 6-hour (sometimes longer) totals; spread each evenly over its hours so it lines up with the models' hourly amounts.
+    var spread = rainByHour(G).spread, nwsRain = showRain ? hours.map(function (ms) { return G.temp[ms] == null ? null : (spread[ms] || 0); }) : null;
     return {
       day: day, index: index,
       prev: index > 0 ? { index: index - 1, name: ctx.days[index - 1].name } : null,
@@ -384,7 +387,7 @@
       chart: {
         labels: hours.map(function (ms) { return DOW[barnDate(ms, off).getUTCDay()] + " " + clock(ms, off); }),
         hours: hours.map(function (ms) { return hourOf(ms, off); }),  // hour of day at the barn, for the 3-hour labels
-        nws: { temp: temp, dew: col("dew"), feels: showFeels ? feels : null, wind: col("wind"), gust: col("gust"), sky: col("sky"), rh: col("rh"), pop: showRain ? col("pop") : null },
+        nws: { temp: temp, dew: col("dew"), feels: showFeels ? feels : null, wind: col("wind"), gust: col("gust"), sky: col("sky"), rh: col("rh"), pop: showRain ? col("pop") : null, rain: nwsRain },
         models: models
       }
     };
