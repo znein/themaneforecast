@@ -156,7 +156,7 @@
       (x.showRain ? '<section class="dd-section"><h3>Rain <span>chance each hour · NWS bars, models lines</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
         (x.rainBlocks.length ? '<ul class="amounts" aria-label="NWS rain amounts">' + amounts(x.rainBlocks, "", 2) + "</ul>" : "") + "</section>" : "") +
       (x.snow.length || x.ice.length ? '<section class="dd-section"><h3>Snow and ice <span>NWS</span></h3><ul class="amounts">' + amounts(x.snow, " snow", 1) + amounts(x.ice, " ice", 2) + "</ul></section>" : "") +
-      '<section class="dd-section"><h3>Wind <span>NWS · mph · gusts dashed</span></h3><div class="chart-box"><canvas data-chart="wind" role="img" aria-label="Hourly wind and gusts"></canvas></div></section>' +
+      '<section class="dd-section"><h3>Wind <span>NWS · mph · wind (blue) · gusts (grey, dashed)</span></h3><div class="chart-box"><canvas data-chart="wind" role="img" aria-label="Hourly wind and gusts"></canvas></div></section>' +
       '<section class="dd-section"><h3>Clouds and humidity <span>NWS · sky cover shaded · humidity line</span></h3><div class="chart-box"><canvas data-chart="sky" role="img" aria-label="Hourly sky cover and humidity"></canvas></div></section>' +
       '<footer class="dd-foot"><span>Hourly data ' + esc(x.window) + ".</span></footer>";
   }
@@ -203,7 +203,7 @@
       chart("rain", L, rain, pct);
     }
     chart("wind", L, [line("Wind", d.nws.wind, SOURCE_COLORS[0], { unit: " mph" }),
-      line("Gusts", d.nws.gust, SOURCE_COLORS[0], { borderDash: [5, 4], borderWidth: 1.6, unit: " mph" })], { min: 0, suggestedMax: 20 });
+      line("Gusts", d.nws.gust, "#9aa3b5", { borderDash: [5, 4], borderWidth: 1.6, unit: " mph" })  // grey, so gusts read apart from wind], { min: 0, suggestedMax: 20 });
     chart("sky", L, [line("Sky cover", d.nws.sky, "rgba(205, 214, 228, 0.55)", { backgroundColor: "rgba(205, 214, 228, 0.16)", fill: "origin", unit: "%" }),
       line("Humidity", d.nws.rh, "#8fd0ff", { unit: "%" })], pct);
   }
