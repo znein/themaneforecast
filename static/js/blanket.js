@@ -1,11 +1,19 @@
 // Blanket Mikey tonight? Mom's settings live on this device. The nights are built and the call is
-// made by Neighcast's own code (neighcast.js, copied byte for byte), so both sites always agree.
+// made by Neighcast's own code (neighcast.js, copied byte for byte), but with Mikey's own chart:
+// the ranges his family actually blankets him by, instead of Neighcast's three coat charts.
 (function () {
   "use strict";
   var N = window.Neighcast;
+  // Mikey's chart (°F, what it feels like at his stall overnight): no blanket at 60 and up, sheet
+  // 55-60, light (100g) 45-55, medium (200g) 30-45, heavy (300g) below 30. Added next to Neighcast's
+  // charts so its decide() and chartLevel() use it unchanged. MAX_OK: warmest he's comfortable in each.
+  N.CHART.mikey = [[60, 0], [55, 1], [45, 2], [30, 3], [-999, 4]];
+  N.MAX_OK.mikey = { 1: 65, 2: 60, 3: 50, 4: 40 };
   var KEY = "maneforecast.mikey.v1";
-  var DEFAULTS = { coat: "unclipped", shelter: "runin", warm: false, offset: 0 };  // his partly covered stall counts as a run-in, not a box stall
-  var COATS = ["unclipped", "partial", "clipped"], SHELTERS = ["none", "runin", "stall"];
+  var DEFAULTS = { coat: "mikey", shelter: "runin", warm: false, offset: 0 };  // his partly covered stall counts as a run-in, not a box stall
+  var SHELTERS = ["none", "runin", "stall"];
+  // His blankets, as the family names them (Neighcast's generic weights don't match his).
+  var WEIGHTS = ["Let his coat do the work tonight.", "Waterproof sheet, no fill.", "Light turnout, 100g fill.", "Medium turnout, 200g fill.", "Heavy turnout, 300g fill."];
   // Our icons for Neighcast's levels (Neighcast uses emoji; the names and weights are Neighcast's).
   var ICONS = ["sun", "umbrella", "thermometer-low", "thermometer-snow", "snow", "snow2"];
   var SHORT = ["No blanket", "Sheet", "Light", "Medium", "Heavy", "Heavy + liner"];
@@ -16,9 +24,9 @@
   function clean(s) {
     s = s || {};
     return {
-      coat: COATS.indexOf(s.coat) >= 0 ? s.coat : DEFAULTS.coat,
+      coat: "mikey",   // always his own chart; an older saved coat choice is ignored
       shelter: SHELTERS.indexOf(s.shelter) >= 0 ? s.shelter : DEFAULTS.shelter,
-      warm: typeof s.warm === "boolean" ? s.warm : DEFAULTS.warm,
+      warm: false,     // "feels the cold more" was removed: the fine-tune slider does that job
       // Comfort: blanket him as if the night were this many °F colder (0-20). Applied to the
       // temperatures before Neighcast's rules see them, so the rules themselves stay untouched.
       offset: isFinite(+s.offset) ? Math.max(0, Math.min(20, Math.round(+s.offset))) : DEFAULTS.offset
@@ -28,12 +36,11 @@
   function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* private mode: still works for this visit */ } }
   var S = read();
 
-  // A settings link restores them: ?coat=clipped&shelter=runin&warm=1&offset=5 (never a location).
+  // A settings link restores them: ?shelter=runin&offset=5 (never a location).
   (function fromLink() {
     var q = new URLSearchParams(location.search);
-    if (!q.has("coat") && !q.has("shelter") && !q.has("warm") && !q.has("offset")) return;
-    S = clean({ coat: q.get("coat") || S.coat, shelter: q.get("shelter") || S.shelter, warm: q.has("warm") ? q.get("warm") === "1" : S.warm,
-      offset: q.has("offset") ? q.get("offset") : S.offset });
+    if (!q.has("shelter") && !q.has("offset")) return;
+    S = clean({ shelter: q.get("shelter") || S.shelter, offset: q.has("offset") ? q.get("offset") : S.offset });
     save(S);
     if (history.replaceState) history.replaceState(null, "", location.pathname + location.hash);
   })();
@@ -51,14 +58,12 @@
     return x;
   }
   // Each blanket's temperature range for these settings, worked out degree by degree the way the rules
-  // decide a dry night: the coat's chart on the temperature lowered by the fine-tune offset, plus
-  // "feels the cold" (one weight warmer below 50°F, never past the top level).
-  var BAND_NAMES = ["No blanket", "Sheet (0g)", "Light (50–150g)", "Medium (180–250g)", "Heavy (300g+)", "Heavy + liner"];
+  // decide a dry night: Mikey's chart on the temperature lowered by the fine-tune offset.
+  var BAND_NAMES = ["No blanket", "Sheet", "Light (100g)", "Medium (200g)", "Heavy (300g)"];
   function bands(s) {
     var out = [];
     for (var t = 100; t >= -20; t--) {
       var eff = t - s.offset, lv = N.chartLevel(s.coat, eff);
-      if (s.warm && eff < 50 && lv < 5) lv += 1;
       var last = out[out.length - 1];
       if (last && last.level === lv) last.low = t; else out.push({ level: lv, high: t, low: t });
     }
@@ -87,7 +92,7 @@
     $("blanket-card").className = "blanket lvl-" + c0.level;
     $("blanket-icon").className = "bi bi-" + ICONS[c0.level];
     $("blanket-answer").textContent = c0.level === 0 ? "No blanket needed" : "Yes, " + L.name.toLowerCase();
-    $("blanket-weight").textContent = L.weight;
+    $("blanket-weight").textContent = WEIGHTS[c0.level] || L.weight;
     var both = n0.nws ? " <small>(Open-Meteo " + r(n0.om.low) + "° · NWS " + r(n0.nws.low) + "°)</small>" : "";
     var bothF = n0.nws ? " <small>(" + r(n0.om.feelLow) + "° · " + r(n0.nws.feelLow) + "°)</small>" : "";
     $("blanket-facts").innerHTML = [
@@ -127,11 +132,10 @@
       }
     }
 
-    var coatName = { unclipped: "Unclipped", partial: "Partly clipped", clipped: "Clipped" }[S.coat];
     var shelterName = { none: "out in the open", runin: "partly sheltered", stall: "closed box stall" }[S.shelter];
     var p = n0.date.split("-"), nd = new Date(Date.UTC(+p[0], p[1] - 1, +p[2]));
     $("blanket-for").textContent = "Tonight · " + nd.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }) +
-      " · " + coatName + ", " + shelterName + (S.warm ? ", feels the cold" : "") + (S.offset ? ", +" + S.offset + "° comfort" : "");
+      " · Mikey's chart, " + shelterName + (S.offset ? ", +" + S.offset + "° comfort" : "");
     badges(ns);
   }
 
@@ -154,16 +158,14 @@
   // ---------- his part of Mikey's settings ----------
   var dlg = $("mikey-settings"), form = $("mikey-settings-form");
   function fill(s) {
-    form.querySelectorAll('input[name="coat"]').forEach(function (i) { i.checked = i.value === s.coat; });
     form.querySelectorAll('input[name="shelter"]').forEach(function (i) { i.checked = i.value === s.shelter; });
-    form.querySelector('input[name="warm"]').checked = !!s.warm;
     $("comfort").value = s.offset;
     preview();
   }
-  // Live note while she moves the slider or changes his coat.
+  // Live note while she moves the slider or changes where he spends the night.
   function current() {
-    var coat = form.querySelector('input[name="coat"]:checked'), shelter = form.querySelector('input[name="shelter"]:checked');
-    return clean({ coat: coat && coat.value, shelter: shelter && shelter.value, warm: form.querySelector('input[name="warm"]').checked, offset: $("comfort").value });
+    var shelter = form.querySelector('input[name="shelter"]:checked');
+    return clean({ shelter: shelter && shelter.value, offset: $("comfort").value });
   }
   function preview() {
     var c = current();
@@ -172,10 +174,10 @@
       return '<li class="lvl-' + b.level + '"><span>' + b.name + "</span><span>" + b.range + "</span></li>";
     }).join("");
     $("comfort-note").textContent = (c.shelter === "stall" ? "Air temperature in a closed stall, overnight. " : "The coldest it feels at his shelter, overnight. ") +
-      (c.warm ? 'Includes "feels the cold": one weight warmer below ' + (50 + c.offset) + "°." : "Rain or wind can move it up one more weight.");
+      (c.shelter === "none" ? "Gusts of 30 mph or more can move it up one more weight." : "Use the slider if he needs it warmer.");
   }
-  form.addEventListener("input", function (e) { if (e.target.name === "offset" || e.target.name === "coat" || e.target.name === "warm") preview(); });
-  form.addEventListener("change", function (e) { if (e.target.name === "coat" || e.target.name === "warm" || e.target.name === "shelter") preview(); });
+  form.addEventListener("input", function (e) { if (e.target.name === "offset") preview(); });
+  form.addEventListener("change", function (e) { if (e.target.name === "shelter") preview(); });
   document.addEventListener("click", function (e) {
     if (!e.target.closest || !e.target.closest("[data-open-settings]")) return;
     fill(S); if (!dlg.open) dlg.showModal();
@@ -183,8 +185,7 @@
   $("mikey-settings-reset").addEventListener("click", function () { fill(clean({})); });
   dlg.addEventListener("close", function () {
     if (dlg.returnValue !== "save") return;
-    var coat = form.querySelector('input[name="coat"]:checked'), shelter = form.querySelector('input[name="shelter"]:checked');
-    S = clean({ coat: coat && coat.value, shelter: shelter && shelter.value, warm: form.querySelector('input[name="warm"]').checked, offset: $("comfort").value });
+    S = current();
     save(S);
     render();
   });

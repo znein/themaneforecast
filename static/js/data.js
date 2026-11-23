@@ -77,8 +77,8 @@
     "probabilityOfPrecipitation", "probabilityOfThunder", "quantitativePrecipitation", "snowfallAmount", "iceAccumulation", "weather"];
   function modelsURL(lat, lon) {
     return "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon +
-      "&hourly=temperature_2m,precipitation,precipitation_probability,wind_gusts_10m&models=" + Object.keys(MODELS).join(",") +
-      "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=8";
+      "&hourly=temperature_2m,precipitation,precipitation_probability,wind_gusts_10m,cloud_cover&models=" + Object.keys(MODELS).join(",") +
+      "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=11";
   }
   function settle(p) { return p.then(function (v) { return { ok: v }; }, function (e) { return { err: String(e.message || e) }; }); }
 
@@ -235,7 +235,8 @@
       h.time.forEach(function (time, i) {
         if (t[i] == null) return;
         s[localToMs(time, off)] = { temp: Math.round(t[i]), rain: Math.max((h["precipitation_" + id] || [])[i] || 0, 0),
-          pop: (h["precipitation_probability_" + id] || [])[i], gust: (h["wind_gusts_10m_" + id] || [])[i] };
+          pop: (h["precipitation_probability_" + id] || [])[i], gust: (h["wind_gusts_10m_" + id] || [])[i],
+          sky: (h["cloud_cover_" + id] || [])[i] };
       });
       out[MODELS[id]] = s;
     });
@@ -295,6 +296,47 @@
     else if (wet.length === rows.length) out.push("All " + rows.length + " sources expect rain (" + Math.min.apply(null, wet.map(function (r) { return r.rain; })).toFixed(2) + "–" + Math.max.apply(null, wet.map(function (r) { return r.rain; })).toFixed(2) + " in).");
     else if (wet.length === 1) out.push("Only " + wet[0].name + " expects rain (" + wet[0].rain.toFixed(2) + " in); the others don't.");
     else out.push(wet.length + " of " + rows.length + " sources expect rain (" + wet.map(function (r) { return r.name; }).join(", ") + ").");
+    return out;
+  }
+
+  // ---------- days 8-10: past NWS's 7 days, from the four models (less certain) ----------
+  var WEEK_DAYS = 10;
+  function avg(list) { return list.length ? list.reduce(function (a, x) { return a + x; }, 0) / list.length : null; }
+  function modelDays(ctx, count) {
+    var out = [], last = ctx.days[ctx.days.length - 1], names = Object.keys(ctx.M);
+    if (!last || count <= 0 || !names.length) return out;
+    var d0 = barnDate(last.startMs, ctx.off);
+    for (var k = 1; k <= count; k++) {
+      // each extra day runs 6 AM to 6 AM in the barn's time, like the NWS day cards
+      var startMs = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate() + k, 6) - ctx.off, endMs = startMs + 24 * 36e5;
+      var per = names.map(function (n) {
+        var dayT = [], nightT = [], pops = [], sky = [], rain = 0, have = 0;
+        for (var ms = startMs; ms < endMs; ms += 36e5) {
+          var v = ctx.M[n][ms]; if (!v) continue;
+          have++; rain += v.rain || 0;
+          if (v.pop != null) pops.push(v.pop);
+          if (ms < startMs + 12 * 36e5) { dayT.push(v.temp); if (v.sky != null) sky.push(v.sky); } else nightT.push(v.temp);
+        }
+        return have >= 18 ? { high: Math.max.apply(null, dayT), low: Math.min.apply(null, nightT), pop: pops.length ? Math.max.apply(null, pops) : null, sky: avg(sky), rain: rain } : null;
+      }).filter(Boolean);
+      if (!per.length) break;   // the models don't reach this far
+      var high = Math.round(avg(per.map(function (p) { return p.high; }))), low = Math.round(avg(per.map(function (p) { return p.low; })));
+      var rain = avg(per.map(function (p) { return p.rain; })), sky = avg(per.map(function (p) { return p.sky; }).filter(function (x) { return x != null; }));
+      var pops = per.map(function (p) { return p.pop; }).filter(function (x) { return x != null; });
+      var chance = pops.length ? Math.round(avg(pops)) : 0;
+      var wet = rain >= 0.1 ? "Rain likely" : rain >= 0.02 ? "Chance of showers" : null;
+      var cloud = sky == null ? null : sky < 30 ? "Sunny" : sky < 70 ? "Partly cloudy" : "Cloudy";
+      var short = wet || cloud || "Model forecast";
+      var icon = wet ? "cloud-rain" : sky == null ? "cloud-sun" : sky < 30 ? "sun" : sky < 70 ? "cloud-sun" : "cloud";
+      var d = barnDate(startMs, ctx.off);
+      out.push({
+        name: DOW[d.getUTCDay()], date: MON[d.getUTCMonth()] + " " + d.getUTCDate(),
+        title: DAY[d.getUTCDay()] + ", " + MON[d.getUTCMonth()] + " " + d.getUTCDate(),
+        high: high, low: low, short: short, icon: icon, chance: chance, showChance: chance >= MIN_CHANCE,
+        startMs: startMs, endMs: endMs, uncertain: true,
+        parts: [{ name: "Less certain", text: "This day is past the National Weather Service's 7-day forecast, so it comes from the average of the four weather models (" + names.join(", ") + "). Forecasts this far out often change; check again as it gets closer." }]
+      });
+    }
     return out;
   }
 
@@ -371,6 +413,7 @@
   function context(bundle) {
     var ctx = { bundle: bundle, off: offsetOf(bundle), G: parseGrid(bundle), M: parseModels(bundle) };
     ctx.days = dayCards(bundle);
+    ctx.days = ctx.days.concat(modelDays(ctx, WEEK_DAYS - ctx.days.length));
     ctx.issued = issuedLabel(bundle.forecast.updated, ctx.off);
     return ctx;
   }

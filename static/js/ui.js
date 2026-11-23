@@ -66,13 +66,14 @@
   }
   function renderWeek() {
     $("week").hidden = false;
-    $("days").style.setProperty("--days", ctx.days.length);  // 7 by day, 8 at night: no empty column
+    $("days").style.setProperty("--days", ctx.days.length);  // 10: NWS's 7 days plus 3 from the models
     $("days").innerHTML = ctx.days.map(function (d, i) {
       var r = M.compareDay(ctx, d).range, spread = "";
       if (r.high) spread = '<span class="day-spread" title="Highest temperature, across every source"><span class="dot ' + (r.high[1] - r.high[0] <= 3 ? "agree" : "split") + '" aria-hidden="true"></span>' +
         (r.high[0] === r.high[1] ? "All say " + r.high[0] + "°" : "Sources " + r.high[0] + "–" + r.high[1] + "°") + "</span>";
-      return '<li><button type="button" class="day' + (i ? "" : " is-first") + '" data-day="' + i + '" data-start-ms="' + d.startMs + '" data-end-ms="' + d.endMs + '">' +
+      return '<li><button type="button" class="day' + (i ? "" : " is-first") + (d.uncertain ? " is-uncertain" : "") + '" data-day="' + i + '" data-start-ms="' + d.startMs + '" data-end-ms="' + d.endMs + '">' +
         '<span class="day-name">' + esc(d.name) + '</span><span class="day-date">' + esc(d.date) + "</span>" +
+        (d.uncertain ? '<span class="day-uncertain" title="Past the NWS 7-day forecast: the four models\' average">Less certain</span>' : "") +
         '<i class="day-icon bi bi-' + d.icon + " is-" + d.icon + '" aria-hidden="true"></i>' +
         '<span class="day-temps"><span class="hi">' + (d.high != null ? d.high + "°" : "") + '</span><span class="lo">' + (d.low != null ? d.low + "°" : "") + "</span></span>" +
         '<span class="day-text">' + esc(d.short) + "</span>" +
@@ -142,7 +143,7 @@
       return list.map(function (b) { return "<li><b>" + b.amount.toFixed(digits) + " in" + unit + "</b> " + esc(b.when) + "</li>"; }).join("");
     };
     return '<header class="dd-head"><div class="dd-titles"><h2 id="day-title" tabindex="-1">' + esc(d.title) + "</h2>" +
-      "<span>National Weather Service · issued " + esc(ctx.issued) + "</span></div>" +
+      "<span>" + (d.uncertain ? "Four weather models · less certain" : "National Weather Service · issued " + esc(ctx.issued)) + "</span></div>" +
       '<div class="dd-nav">' + (x.prev ? '<button type="button" class="btn" data-day="' + x.prev.index + '">‹ ' + esc(x.prev.name) + "</button>" : "") +
       (x.next ? '<button type="button" class="btn" data-day="' + x.next.index + '">' + esc(x.next.name) + " ›</button>" : "") +
       '<button type="button" class="dd-close" data-close aria-label="Close"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div></header>' +
@@ -152,12 +153,12 @@
       (hasHigh ? '<th scope="col">High</th>' : "") + '<th scope="col">Low</th><th scope="col">Rain</th><th scope="col">Chance</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
       (c.sources.some(function (s) { return s.partial; }) ? '<p class="footnote">* Partial: that source\'s forecast doesn\'t cover every hour of this day.</p>' : "") + "</section>" +
       '<div class="nws-text">' + d.parts.map(function (p) { return "<p><b>" + esc(p.name) + ":</b> " + esc(p.text) + "</p>"; }).join("") + "</div>" +
-      '<section class="dd-section"><h3>Temperature <span>every source · °F' + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature from every source"></canvas></div></section>' +
+      '<section class="dd-section"><h3>Temperature <span>average of every source · °F' + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature, the average of every source"></canvas></div></section>' +
       (x.showRain ? '<section class="dd-section"><h3>Rain <span>chance each hour · NWS bars, models lines</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
         (x.rainBlocks.length ? '<ul class="amounts" aria-label="NWS rain amounts">' + amounts(x.rainBlocks, "", 2) + "</ul>" : "") + "</section>" : "") +
       (x.snow.length || x.ice.length ? '<section class="dd-section"><h3>Snow and ice <span>NWS</span></h3><ul class="amounts">' + amounts(x.snow, " snow", 1) + amounts(x.ice, " ice", 2) + "</ul></section>" : "") +
-      '<section class="dd-section"><h3>Wind <span>NWS · mph · wind (blue) · gusts (grey, dashed)</span></h3><div class="chart-box"><canvas data-chart="wind" role="img" aria-label="Hourly wind and gusts"></canvas></div></section>' +
-      '<section class="dd-section"><h3>Clouds and humidity <span>NWS · sky cover shaded · humidity line</span></h3><div class="chart-box"><canvas data-chart="sky" role="img" aria-label="Hourly sky cover and humidity"></canvas></div></section>' +
+      (d.uncertain ? "" : '<section class="dd-section"><h3>Wind <span>NWS · mph · wind (blue) · gusts (grey, dashed)</span></h3><div class="chart-box"><canvas data-chart="wind" role="img" aria-label="Hourly wind and gusts"></canvas></div></section>' +
+      '<section class="dd-section"><h3>Clouds and humidity <span>NWS · sky cover shaded · humidity line</span></h3><div class="chart-box"><canvas data-chart="sky" role="img" aria-label="Hourly sky cover and humidity"></canvas></div></section>') +
       '<footer class="dd-foot"><span>Hourly data ' + esc(x.window) + ".</span></footer>";
   }
   function rgba(hex, a) {
@@ -193,8 +194,14 @@
   function drawCharts(d) {
     clearCharts();
     var L = d.labels, pct = { min: 0, max: 100, ticks: { color: TEXT, stepSize: 50, callback: function (v) { return v + "%"; } } };
-    var temp = [line("NWS", d.nws.temp, SOURCE_COLORS[0], { borderWidth: 3.5, unit: "°F", order: 0 })];
-    d.models.forEach(function (m, i) { temp.push(line(m.name, m.temp, SOURCE_COLORS[i + 1], { borderWidth: 1.6, unit: "°F" })); });
+    // One line: the average of every source that has that hour (NWS plus the four models), rounded.
+    // The day popup's "How the sources compare" table still shows each source on its own.
+    var series = [d.nws.temp].concat(d.models.map(function (m) { return m.temp; })).filter(Boolean);
+    var avg = L.map(function (_, i) {
+      var v = series.map(function (s) { return s[i]; }).filter(function (x) { return x != null && isFinite(x); });
+      return v.length ? Math.round(v.reduce(function (a, x) { return a + x; }, 0) / v.length) : null;
+    });
+    var temp = [line("Average of " + series.length + " sources", avg, SOURCE_COLORS[0], { borderWidth: 3, unit: "°F", order: 0 })];
     if (d.nws.feels) temp.push(line("Feels like (NWS)", d.nws.feels, "#9aa3b5", { borderDash: [5, 4], unit: "°F" }));
     chart("temp", L, temp, { ticks: { color: TEXT, callback: function (v) { return v + "°"; } } });
     if (d.nws.pop) {
@@ -203,7 +210,8 @@
       chart("rain", L, rain, pct);
     }
     chart("wind", L, [line("Wind", d.nws.wind, SOURCE_COLORS[0], { unit: " mph" }),
-      line("Gusts", d.nws.gust, "#9aa3b5", { borderDash: [5, 4], borderWidth: 1.6, unit: " mph" })  // grey, so gusts read apart from wind], { min: 0, suggestedMax: 20 });
+      // gusts in grey, so they read apart from the wind
+      line("Gusts", d.nws.gust, "#9aa3b5", { borderDash: [5, 4], borderWidth: 1.6, unit: " mph" })], { min: 0, suggestedMax: 20 });
     chart("sky", L, [line("Sky cover", d.nws.sky, "rgba(205, 214, 228, 0.55)", { backgroundColor: "rgba(205, 214, 228, 0.16)", fill: "origin", unit: "%" }),
       line("Humidity", d.nws.rh, "#8fd0ff", { unit: "%" })], pct);
   }
