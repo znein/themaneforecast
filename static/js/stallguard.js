@@ -1,6 +1,8 @@
 // Stall guard notice: when rain is coming, when to leave for the barn to put Mikey's stall guard up.
-// Rain "starts" at the earliest hour ANY source flags it (earliest source wins): NWS at or above
-// Mom's chance threshold or with a measurable amount, or a weather model with measurable rain.
+// A rain spell only counts once it adds up to Mom's amount (default 0.15 in): the wetter of the NWS
+// total and the average of the weather models' totals. Lighter rain gets a "light rain only" line.
+// The spell "starts" at the earliest hour ANY source flags rain (earliest source wins): NWS at a 30%
+// chance or with a measurable amount, or a weather model with measurable rain.
 // Leave-by = rain start minus her barn trip (drive + prep + spare). Everything is worked out here,
 // against the current time in her browser, so countdowns and states stay right as time passes.
 (function () {
@@ -9,7 +11,9 @@
   if (!box) return;
   var DATA = null, OFF = 0;  // set by MikeyGuard.render(rainHours) from ui.js
   var KEY = "maneforecast.barn.v1", DONE_KEY = "maneforecast.guard.v1";
-  var DEFAULTS = { drive: 15, prep: 30, spare: 15, evening: 21, threshold: 20 };
+  var DEFAULTS = { drive: 15, prep: 30, spare: 15, evening: 21, amount: 0.15 };
+  var AMOUNTS = [0.05, 0.1, 0.15, 0.25, 0.5];   // inches a spell must reach (her choice in settings)
+  var START_CHANCE = 30;          // % NWS chance that marks an hour as part of a rain spell
   var MEASURABLE = 0.01;          // inches
   var SAME_SPELL_GAP_H = 2;       // wet hours this close together are one rain
   var HORIZON_H = 48;             // look this far ahead for the notice
@@ -22,7 +26,7 @@
     return {
       drive: num(s.drive, 0, 180, DEFAULTS.drive), prep: num(s.prep, 0, 180, DEFAULTS.prep),
       spare: num(s.spare, 0, 120, DEFAULTS.spare), evening: num(s.evening, 17, 23, DEFAULTS.evening),
-      threshold: num(s.threshold, 5, 90, DEFAULTS.threshold)
+      amount: AMOUNTS.indexOf(+s.amount) >= 0 ? +s.amount : DEFAULTS.amount   // an older saved chance setting is ignored
     };
   }
   function read(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } }
@@ -49,7 +53,7 @@
   // ---------- rain spells: earliest source wins ----------
   function wetSources(h) {
     var out = [];
-    if ((h.nwsPop != null && h.nwsPop >= S.threshold) || h.nwsBlock >= MEASURABLE) out.push("NWS");
+    if ((h.nwsPop != null && h.nwsPop >= START_CHANCE) || h.nwsBlock >= MEASURABLE) out.push("NWS");
     Object.keys(h.models || {}).forEach(function (m) { if (h.models[m] >= MEASURABLE) out.push(m); });
     return out;
   }
@@ -69,6 +73,13 @@
       s.endMs = s.lastMs + 36e5;
       s.maxPop = Math.max.apply(null, s.hours.map(function (h) { return h.nwsPop || 0; }));
       s.nwsTotal = s.hours.reduce(function (a, h) { return a + (h.nwsRain || 0); }, 0);
+      // the models' average total over the spell (a model with no rain counts as 0)
+      var models = DATA.models || [];
+      s.modelTotal = models.length ? models.reduce(function (sum, m) {
+        return sum + s.hours.reduce(function (a, h) { return a + ((h.models || {})[m] || 0); }, 0);
+      }, 0) / models.length : 0;
+      s.total = Math.max(s.nwsTotal, s.modelTotal);
+      s.counts = s.total >= S.amount;
       s.sources = Object.keys(s.first).sort(function (a, b) { return s.first[a] - s.first[b]; });
     });
     return out;
@@ -93,7 +104,8 @@
   function chips(sp) {
     var c = [];
     if (sp.maxPop) c.push("NWS chance up to <b>" + sp.maxPop + "%</b>");
-    if (sp.nwsTotal >= 0.005) c.push("NWS about <b>" + sp.nwsTotal.toFixed(2) + " in</b>");
+    c.push("About <b>" + sp.total.toFixed(2) + " in</b> expected");
+    if (sp.nwsTotal >= 0.005 && sp.modelTotal >= 0.005) c.push("NWS " + sp.nwsTotal.toFixed(2) + " in · models " + sp.modelTotal.toFixed(2) + " in");
     var html = c.map(function (x) { return "<li>" + x + "</li>"; }).join("");
     var models = DATA.models;
     var wetModels = models.filter(function (m) { return sp.first[m] != null; });
@@ -121,13 +133,17 @@
   function render() {
     if (!DATA) return;
     var now = Date.now();
-    var all = spells(), sp = all.filter(function (s) { return s.endMs > now; })[0];
+    var all = spells().filter(function (s) { return s.counts; }), sp = all.filter(function (s) { return s.endMs > now; })[0];
+    var light = spells().filter(function (s) { return !s.counts && s.endMs > now && s.startMs - now <= HORIZON_H * 36e5; })[0];
     var settingsBtn = '<button type="button" class="btn btn-small" data-open-settings><i class="bi bi-sliders" aria-hidden="true"></i> Barn trip</button>';
     box.hidden = false;
     if (!sp || sp.startMs - now > HORIZON_H * 36e5) {
       var through = DATA.hours.length ? clock(DATA.hours[Math.min(DATA.hours.length, HORIZON_H) - 1].ms, true).split(" ")[0] : "";
       box.className = "guard guard-dry";
-      box.innerHTML = '<span class="guard-mini-icon">' + GATE + "</span><span>No rain expected" + (through ? " through " + ({ Sun: "Sunday", Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday" }[through]) : "") + ". The stall guard can stay down.</span>";
+      var thru = through ? " through " + ({ Sun: "Sunday", Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday" }[through]) : "";
+      box.innerHTML = '<span class="guard-mini-icon">' + GATE + "</span><span>" + (light
+        ? "Only light rain expected" + thru + " (about " + light.total.toFixed(2) + " in, under your " + S.amount.toFixed(2) + " in). The stall guard can stay down."
+        : "No rain expected" + thru + ". The stall guard can stay down.") + "</span>";
       badges(all, now);
       return;
     }
@@ -203,7 +219,7 @@
     var t = $("trip-total"), total = draft.drive + draft.prep + draft.spare;
     if (t) t.textContent = "Leave " + (total % 60 ? (total >= 60 ? Math.floor(total / 60) + " h " : "") + (total % 60) + " min" : (total / 60) + (total === 60 ? " hour" : " hours")) + " before the rain.";
     if ($("trip-evening")) $("trip-evening").value = String(draft.evening);
-    if ($("trip-threshold")) $("trip-threshold").value = String(draft.threshold);
+    if ($("trip-amount")) $("trip-amount").value = String(draft.amount);
   }
   if (dlg) {
     // Any settings button (the blanket card's or this notice's) opens the shared popup.
@@ -218,8 +234,8 @@
       draft[k] = Math.max(0, Math.min(180, draft[k] + +b.getAttribute("data-by")));
       show();
     });
-    ["trip-evening", "trip-threshold"].forEach(function (id) {
-      var el = $(id); if (el) el.addEventListener("change", function () { draft[id === "trip-evening" ? "evening" : "threshold"] = +el.value; show(); });
+    ["trip-evening", "trip-amount"].forEach(function (id) {
+      var el = $(id); if (el) el.addEventListener("change", function () { draft[id === "trip-evening" ? "evening" : "amount"] = +el.value; show(); });
     });
     var reset = $("mikey-settings-reset");
     if (reset) reset.addEventListener("click", function () { draft = clean({}); show(); });

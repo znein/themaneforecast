@@ -89,9 +89,9 @@
             <p class="blanket-off" id="blanket-off" hidden></p>
             <details class="cold-explainer">
               <summary>How cold is too cold?</summary>
-              <p>A <b>dry, thick winter coat</b> is excellent insulation. Horses with one don't start burning extra energy to stay warm until about <b>18°F</b> (Rutgers, University of Minnesota). That's why the Unclipped setting rarely calls for a blanket above 30°F.</p>
+              <p>A <b>dry, thick winter coat</b> is excellent insulation. Horses with one don't start burning extra energy to stay warm until about <b>18°F</b> (Rutgers, University of Minnesota).</p>
               <p><b>Wet changes everything.</b> A wet or thin coat loses most of that protection, closer to <b>59°F</b> (Rutgers), which is why rain moves the call up.</p>
-              <p><b>Most horses in mild climates never grow that coat,</b> so they're blanketed like clipped horses. Shelter, plenty of hay and good body condition all help.</p>
+              <p><b>Most horses in mild climates never grow that coat,</b> so they're blanketed more like clipped horses, which is why Mikey's chart starts the sheet at 60°F. Shelter, plenty of hay and good body condition all help.</p>
               <p class="fine">General guidance from university extension services, not veterinary advice. Your vet knows Mikey best.</p>
             </details>
             <p class="blanket-foot"><span id="blanket-for"></span></p>
@@ -130,24 +130,17 @@
         <p class="zip-msg" id="place-msg" aria-live="polite"></p>
       </fieldset>
       <fieldset>
-        <legend>His coat</legend>
-        <label><input type="radio" name="coat" value="unclipped"> <b>Unclipped</b> <span>a thick coat grown for cold winters</span></label>
-        <label><input type="radio" name="coat" value="partial"> <b>Partly clipped</b> <span>trace or bib clip</span></label>
-        <label><input type="radio" name="coat" value="clipped"> <b>Clipped</b> <span>full clip, a summer-weight coat, or a horse in a mild climate that never grows a real winter coat</span></label>
-        <p class="coat-tip"><i class="bi bi-info-circle" aria-hidden="true"></i> <span><b>In a mild climate</b> (like Southern California, Florida or Texas)? Most horses there never grow a cold-climate coat, so choose <b>Clipped</b>. Extension services treat horses that aren't used to cold winters like clipped horses.</span></p>
-      </fieldset>
-      <fieldset>
         <legend>Where he spends the night</legend>
         <label><input type="radio" name="shelter" value="none"> <b>Out in the open</b> <span>field or paddock, no cover</span></label>
         <label><input type="radio" name="shelter" value="runin"> <b>Partly sheltered</b> <span>run-in, or an open stall with a roof over part of it (like Mikey's)</span></label>
         <label><input type="radio" name="shelter" value="stall"> <b>Closed box stall</b> <span>inside a barn, out of the wind and rain</span></label>
       </fieldset>
       <fieldset>
-        <legend>Extra care</legend>
-        <label><input type="checkbox" name="warm" value="1"> <b>He feels the cold more</b> <span>older, thin, a hard keeper, or new to this weather: one weight warmer, on nights that feel colder than 50°F</span></label>
+        <legend>Mikey's blankets</legend>
+        <p class="coat-tip"><i class="bi bi-info-circle" aria-hidden="true"></i> <span>His chart: <b>sheet</b> 55–60°F, <b>light</b> (100g) 45–55°F, <b>medium</b> (200g) 30–45°F, <b>heavy</b> (300g) below 30°F, going by how cold it feels at his stall overnight.</span></p>
         <label class="range-row" for="comfort"><span><b>Fine-tune (optional):</b> blanket him as if it's <output id="comfort-out">0°</output> colder</span>
           <input type="range" id="comfort" name="offset" min="0" max="20" step="1" value="0">
-          <small>Use this if the forecast keeps calling it a little lighter than you actually blanket him.</small>
+          <small>Moves every range warmer: at 5°, the sheet starts at 65°F instead of 60°F.</small>
         </label>
         <div class="bands" aria-live="polite">
           <span class="bands-title">With these settings</span>
@@ -166,9 +159,9 @@
             <option value="18">6:00 PM</option><option value="19">7:00 PM</option><option value="20">8:00 PM</option><option value="21">9:00 PM</option><option value="22">10:00 PM</option>
           </select>
         </label>
-        <label class="select-row" for="trip-threshold"><span>Rain counts once NWS gives at least</span>
-          <select id="trip-threshold" name="threshold">
-            <option value="10">10% chance</option><option value="20">20% chance</option><option value="30">30% chance</option><option value="40">40% chance</option><option value="50">50% chance</option>
+        <label class="select-row" for="trip-amount"><span>Put the stall guard up for rain of at least</span>
+          <select id="trip-amount" name="amount">
+            <option value="0.05">0.05 inch</option><option value="0.1">0.10 inch</option><option value="0.15">0.15 inch</option><option value="0.25">0.25 inch</option><option value="0.5">0.50 inch</option>
           </select>
         </label>
       </fieldset>
