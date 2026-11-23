@@ -52,7 +52,7 @@
     renderWeek();
     var alerts = M.activeAlerts(ctx);
     renderAlerts(alerts);
-    if (window.MikeyBlanket) window.MikeyBlanket.render(b);
+    if (window.MikeyBlanket) window.MikeyBlanket.render(b, ctx);
     if (window.MikeyGuard) window.MikeyGuard.render(Object.assign(M.rainHours(ctx), { alerts: alerts, off: ctx.off }));
   }
 
@@ -153,7 +153,8 @@
       (hasHigh ? '<th scope="col">High</th>' : "") + '<th scope="col">Low</th><th scope="col">Rain</th><th scope="col">Chance</th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
       (c.sources.some(function (s) { return s.partial; }) ? '<p class="footnote">* Partial: that source\'s forecast doesn\'t cover every hour of this day.</p>' : "") + "</section>" +
       '<div class="nws-text">' + d.parts.map(function (p) { return "<p><b>" + esc(p.name) + ":</b> " + esc(p.text) + "</p>"; }).join("") + "</div>" +
-      '<section class="dd-section"><h3>Temperature <span>average of every source · °F' + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature, the average of every source"></canvas></div></section>' +
+      '<section class="dd-section"><h3>Temperature <span>' + (hasNws(x.chart) ? "National Weather Service" : "average of the four models") + " · °F" + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature, numbers every 3 hours"></canvas></div>' +
+        hourlyHTML(M.hourly(ctx, d.startMs, d.endMs), { title: "Hourly" }) + "</section>" +
       (x.showRain ? '<section class="dd-section"><h3>Rain <span>chance each hour · NWS bars, models lines</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
         (x.rainBlocks.length ? '<ul class="amounts" aria-label="NWS rain amounts">' + amounts(x.rainBlocks, "", 2) + "</ul>" : "") + "</section>" : "") +
       (x.snow.length || x.ice.length ? '<section class="dd-section"><h3>Snow and ice <span>NWS</span></h3><ul class="amounts">' + amounts(x.snow, " snow", 1) + amounts(x.ice, " ice", 2) + "</ul></section>" : "") +
@@ -161,18 +162,62 @@
       '<section class="dd-section"><h3>Clouds and humidity <span>NWS · sky cover shaded · humidity line</span></h3><div class="chart-box"><canvas data-chart="sky" role="img" aria-label="Hourly sky cover and humidity"></canvas></div></section>') +
       '<footer class="dd-foot"><span>Hourly data ' + esc(x.window) + ".</span></footer>";
   }
+  // ---------- "Hourly" drop-down: one row per hour ----------
+  function hourIcon(x) {
+    var night = x.hour < 6 || x.hour >= 18;
+    if (x.pop >= 50) return "cloud-rain";
+    if (x.pop >= 30) return "cloud-drizzle";
+    if (x.sky >= 88) return "clouds";
+    if (x.sky >= 50) return night ? "cloud-moon" : "cloud-sun";
+    return night ? "moon-stars" : "sun";
+  }
+  function hourlyHTML(rows, opts) {
+    opts = opts || {};
+    if (!rows.length) return "";
+    var models = rows.some(function (x) { return x.src === "models"; });
+    return '<details class="hourly"' + (opts.open ? " open" : "") + '><summary><span>' + esc(opts.title || "Hourly") + '</span><i class="bi bi-chevron-down" aria-hidden="true"></i></summary>' +
+      '<ol class="hour-list">' + rows.map(function (x, i) {
+        var mark = opts.mark === x.ms, newDay = i > 0 && x.hour === 0;
+        return '<li class="hour' + (mark ? " is-mark" : "") + (newDay ? " is-new-day" : "") + '">' +
+          '<span class="h-time">' + (newDay || i === 0 ? '<small>' + x.day + "</small> " : "") + x.time + "</span>" +
+          '<i class="h-icon bi bi-' + hourIcon(x) + '" aria-hidden="true"></i>' +
+          '<span class="h-temp">' + x.temp + "°</span>" +
+          '<span class="h-feels">' + (x.feels != null ? "feels " + x.feels + "°" : "") + "</span>" +
+          '<span class="h-pop">' + (x.pop != null && x.pop >= 10 ? '<i class="bi bi-droplet-fill" aria-hidden="true"></i>' + x.pop + "%" : "") + "</span>" +
+          '<span class="h-wind">' + (x.wind != null ? x.wind + " mph" + (x.gust != null && x.gust >= x.wind + 5 ? ' <small>gusts ' + x.gust + "</small>" : "") : "") + "</span>" +
+          (mark && opts.markLabel ? '<span class="h-mark">' + esc(opts.markLabel) + "</span>" : "") + "</li>";
+      }).join("") + "</ol>" +
+      (models ? '<p class="footnote">Hours past the NWS forecast use the four models\' average.</p>' : "") + "</details>";
+  }
+  window.ManeHourly = { html: hourlyHTML };
+
   function rgba(hex, a) {
     var h = hex.replace("#", "");
     return "rgba(" + parseInt(h.slice(0, 2), 16) + "," + parseInt(h.slice(2, 4), 16) + "," + parseInt(h.slice(4, 6), 16) + "," + a + ")";
   }
   function clearCharts() { charts.forEach(function (c) { c.destroy(); }); charts = []; }
-  function chart(name, labels, datasets, y) {
+  // Like weather.gov's hourly graph: a time under every third hour (12 AM, 3 AM, 6 AM...), with
+  // the temperature written above the line at those same hours.
+  var HOURS = [];
+  function third(i) { return HOURS[i] != null && HOURS[i] % 3 === 0; }
+  var valueLabels = {
+    id: "value_labels",
+    afterDatasetsDraw: function (c) {
+      var meta = c.getDatasetMeta(0), data = c.data.datasets[0].data, g = c.ctx;
+      g.save(); g.font = "600 12px Inter, system-ui, sans-serif"; g.fillStyle = "#e8eaf0"; g.textAlign = "center"; g.textBaseline = "bottom";
+      meta.data.forEach(function (pt, i) { if (data[i] != null && third(i)) g.fillText(data[i] + "°", pt.x, pt.y - 7); });
+      g.restore();
+    }
+  };
+  function chart(name, labels, datasets, y, labelled) {
     var canvas = content.querySelector('[data-chart="' + name + '"]');
     if (!canvas || !window.Chart) return;
     charts.push(new Chart(canvas, {
       data: { labels: labels, datasets: datasets },
+      plugins: labelled ? [valueLabels] : [],
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
+        layout: { padding: { top: labelled ? 20 : 0, left: 4, right: 4 } },
         interaction: { mode: "index", intersect: false },
         elements: { point: { radius: 0, hoverRadius: 4, hitRadius: 8 }, line: { tension: 0.35, borderWidth: 2 } },
         plugins: {
@@ -181,8 +226,9 @@
             callbacks: { label: function (i) { return " " + i.dataset.label + ": " + i.formattedValue + (i.dataset.unit || ""); } } }
         },
         scales: {
-          x: { grid: { color: GRID }, ticks: { color: TEXT, maxRotation: 0, autoSkip: true, maxTicksLimit: 9,
-            callback: function (v) { return this.getLabelForValue(v).split(" ").slice(1).join(" "); } } },
+          x: { grid: { color: function (c) { return third(c.index) ? GRID : "transparent"; } },
+            ticks: { color: TEXT, maxRotation: 0, autoSkip: false, font: { size: 11 },
+              callback: function (v) { return third(v) ? this.getLabelForValue(v).split(" ").slice(1).join(" ") : null; } } },
           y: Object.assign({ grid: { color: GRID }, ticks: { color: TEXT } }, y)
         }
       }
@@ -191,8 +237,10 @@
   function line(label, data, color, extra) {
     return Object.assign({ type: "line", label: label, data: data, borderColor: color, backgroundColor: color, spanGaps: true }, extra || {});
   }
+  function hasNws(d) { return d.nws.temp.some(function (v) { return v != null; }); }
   function drawCharts(d) {
     clearCharts();
+    HOURS = d.hours || [];
     var L = d.labels, pct = { min: 0, max: 100, ticks: { color: TEXT, stepSize: 50, callback: function (v) { return v + "%"; } } };
     // One line: the average of every source that has that hour (NWS plus the four models), rounded.
     // The day popup's "How the sources compare" table still shows each source on its own.
@@ -201,9 +249,12 @@
       var v = series.map(function (s) { return s[i]; }).filter(function (x) { return x != null && isFinite(x); });
       return v.length ? Math.round(v.reduce(function (a, x) { return a + x; }, 0) / v.length) : null;
     });
-    var temp = [line("Average of " + series.length + " sources", avg, SOURCE_COLORS[0], { borderWidth: 3, unit: "°F", order: 0 })];
+    var main = hasNws(d) ? line("National Weather Service", d.nws.temp, SOURCE_COLORS[0], { borderWidth: 3, unit: "°F", order: 0 })
+                         : line("Average of the four models", avg, SOURCE_COLORS[0], { borderWidth: 3, unit: "°F", order: 0 });
+    main.pointRadius = function (c) { return third(c.dataIndex) ? 3 : 0; };
+    var temp = [main];
     if (d.nws.feels) temp.push(line("Feels like (NWS)", d.nws.feels, "#9aa3b5", { borderDash: [5, 4], unit: "°F" }));
-    chart("temp", L, temp, { ticks: { color: TEXT, callback: function (v) { return v + "°"; } } });
+    chart("temp", L, temp, { grace: "12%", ticks: { color: TEXT, callback: function (v) { return v + "°"; } } }, true);
     if (d.nws.pop) {
       var rain = [{ type: "bar", label: "NWS", data: d.nws.pop, backgroundColor: rgba(SOURCE_COLORS[0], 0.45), unit: "%", order: 2 }];
       d.models.forEach(function (m, i) { if (m.pop) rain.push(line(m.name, m.pop, SOURCE_COLORS[i + 1], { borderWidth: 1.6, unit: "%", order: 1 })); });

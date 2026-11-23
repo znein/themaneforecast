@@ -122,7 +122,17 @@
 
   // ---------- time at the barn ----------
   // Open-Meteo reports the barn's UTC offset; every label uses it, whatever the phone's own timezone.
-  function offsetOf(b) { return ((b.om && b.om.utc_offset_seconds) || (b.models && b.models.utc_offset_seconds) || 0) * 1000; }
+  // If Open-Meteo didn't answer, the NWS forecast's own times carry the offset ("...T18:00:00-08:00");
+  // never fall back to UTC, which put every hour 8 hours off in California.
+  function offsetOf(b) {
+    var om = b.om && b.om.utc_offset_seconds, mo = b.models && b.models.utc_offset_seconds;
+    if (om != null) return om * 1000;
+    if (mo != null) return mo * 1000;
+    var p = b.forecast && b.forecast.periods && b.forecast.periods[0];
+    var m = p && /([+-])(\d\d):(\d\d)$/.exec(p.startTime || "");
+    if (m) return (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) * 60000;
+    return -new Date().getTimezoneOffset() * 60000;  // last resort: this device's own time zone
+  }
   function barnDate(ms, off) { return new Date(ms + off); }
   var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], DAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -373,11 +383,37 @@
       window: clock(hours[0], off) + " " + DOW[barnDate(hours[0], off).getUTCDay()] + " to " + clock(hours[hours.length - 1], off) + " " + DOW[barnDate(hours[hours.length - 1], off).getUTCDay()],
       chart: {
         labels: hours.map(function (ms) { return DOW[barnDate(ms, off).getUTCDay()] + " " + clock(ms, off); }),
+        hours: hours.map(function (ms) { return hourOf(ms, off); }),  // hour of day at the barn, for the 3-hour labels
         nws: { temp: temp, dew: col("dew"), feels: showFeels ? feels : null, wind: col("wind"), gust: col("gust"), sky: col("sky"), rh: col("rh"), pop: showRain ? col("pop") : null },
         models: models
       }
     };
   }
+
+  // ---------- hour by hour, for the "Hourly" lists: NWS first (what weather.gov shows), else the models' average ----------
+  function hourly(ctx, fromMs, toMs) {
+    var G = ctx.G || {}, names = Object.keys(ctx.M), rbh = rainByHour(ctx.G), out = [];
+    var pick = function (k, ms) { return G[k] && G[k][ms] != null ? G[k][ms] : null; };
+    for (var ms = Math.floor(fromMs / 36e5) * 36e5; ms <= toMs; ms += 36e5) {
+      var temp = pick("temp", ms), src = "nws";
+      if (temp == null) {
+        var t = names.map(function (n) { return (ctx.M[n][ms] || {}).temp; }).filter(function (v) { return v != null; });
+        if (!t.length) continue;
+        temp = Math.round(avg(t)); src = "models";
+      }
+      var feels = pick("windChill", ms); if (feels == null) feels = pick("heatIndex", ms);
+      var pops = names.map(function (n) { return (ctx.M[n][ms] || {}).pop; }).filter(function (v) { return v != null; });
+      var skies = names.map(function (n) { return (ctx.M[n][ms] || {}).sky; }).filter(function (v) { return v != null; });
+      var pop = src === "nws" ? pick("pop", ms) : (pops.length ? Math.round(avg(pops)) : null);
+      out.push({ ms: ms, hour: hourOf(ms, ctx.off), time: clock(ms, ctx.off), day: DOW[barnDate(ms, ctx.off).getUTCDay()], src: src,
+        temp: temp, feels: feels != null && Math.abs(feels - temp) >= 2 ? feels : null, pop: pop,
+        wind: pick("wind", ms), gust: pick("gust", ms), sky: src === "nws" ? pick("sky", ms) : (skies.length ? Math.round(avg(skies)) : null),
+        rain: rbh.spread[ms] || 0 });
+    }
+    return out;
+  }
+  // "2026-11-23" + hour at the barn -> epoch ms
+  function barnMs(ymd, hour, off) { var p = ymd.split("-"); return Date.UTC(+p[0], p[1] - 1, +p[2], hour) - off; }
 
   // ---------- the stall guard's rain hours (next 72 hours, every source) ----------
   function rainHours(ctx) {
@@ -419,5 +455,5 @@
   }
 
   window.Mane = { getPlace: getPlace, setPlace: setPlace, findPlace: findPlace, findHere: findHere, load: load, context: context,
-    compareDay: compareDay, dayDetail: dayDetail, rainHours: rainHours, clock: clock, barnDate: barnDate, activeAlerts: activeAlerts };
+    compareDay: compareDay, dayDetail: dayDetail, hourly: hourly, barnMs: barnMs, rainHours: rainHours, clock: clock, barnDate: barnDate, activeAlerts: activeAlerts };
 })();

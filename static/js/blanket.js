@@ -10,7 +10,7 @@
   N.CHART.mikey = [[60, 0], [55, 1], [45, 2], [30, 3], [-999, 4]];
   N.MAX_OK.mikey = { 1: 65, 2: 60, 3: 50, 4: 40 };
   var KEY = "maneforecast.mikey.v1";
-  var DEFAULTS = { coat: "mikey", shelter: "runin", warm: false, offset: 0 };  // his partly covered stall counts as a run-in, not a box stall
+  var DEFAULTS = { coat: "mikey", shelter: "runin", warm: false, offset: 0, blanket_hour: 17 };  // his partly covered stall counts as a run-in, not a box stall
   var SHELTERS = ["none", "runin", "stall"];
   // His blankets, as the family names them (Neighcast's generic weights don't match his).
   var WEIGHTS = ["Let his coat do the work tonight.", "Waterproof sheet, no fill.", "Light turnout, 100g fill.", "Medium turnout, 200g fill.", "Heavy turnout, 300g fill."];
@@ -18,7 +18,7 @@
   var ICONS = ["sun", "umbrella", "thermometer-low", "thermometer-snow", "snow", "snow2"];
   var SHORT = ["No blanket", "Sheet", "Light", "Medium", "Heavy", "Heavy + liner"];
   var $ = function (id) { return document.getElementById(id); };
-  var bundle = null;
+  var bundle = null, ctx = null;
 
   // ---------- settings: saved on this device ----------
   function clean(s) {
@@ -29,7 +29,10 @@
       warm: false,     // "feels the cold more" was removed: the fine-tune slider does that job
       // Comfort: blanket him as if the night were this many °F colder (0-20). Applied to the
       // temperatures before Neighcast's rules see them, so the rules themselves stay untouched.
-      offset: isFinite(+s.offset) ? Math.max(0, Math.min(20, Math.round(+s.offset))) : DEFAULTS.offset
+      offset: isFinite(+s.offset) ? Math.max(0, Math.min(20, Math.round(+s.offset))) : DEFAULTS.offset,
+      // When the family usually puts his blanket on (barn hour, 3-9 pm). The call is still for the
+      // whole night; this only says how warm it is when it goes on.
+      blanket_hour: s.blanket_hour != null && isFinite(+s.blanket_hour) ? Math.max(15, Math.min(21, Math.round(+s.blanket_hour))) : DEFAULTS.blanket_hour
     };
   }
   function read() { try { return clean(JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { return clean({}); } }
@@ -40,7 +43,7 @@
   (function fromLink() {
     var q = new URLSearchParams(location.search);
     if (!q.has("shelter") && !q.has("offset")) return;
-    S = clean({ shelter: q.get("shelter") || S.shelter, offset: q.has("offset") ? q.get("offset") : S.offset });
+    S = clean({ shelter: q.get("shelter") || S.shelter, offset: q.has("offset") ? q.get("offset") : S.offset, blanket_hour: S.blanket_hour });
     save(S);
     if (history.replaceState) history.replaceState(null, "", location.pathname + location.hash);
   })();
@@ -121,6 +124,8 @@
       src.textContent = "Open-Meteo and the National Weather Service agree" + (n0.gap >= 1 ? " (within " + r(n0.gap) + "°)" : "") + ".";
     }
 
+    evening(n0, c0, L);
+
     // Take it off by...
     var offEl = $("blanket-off"); offEl.hidden = true;
     if (c0.level > 0 && n0.day.length) {
@@ -137,6 +142,37 @@
     $("blanket-for").textContent = "Tonight · " + nd.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }) +
       " · Mikey's chart, " + shelterName + (S.offset ? ", +" + S.offset + "° comfort" : "");
     badges(ns);
+  }
+
+  // ---------- blanket time: how warm it is when the blanket goes on ----------
+  function clockOf(hr) { return (hr % 12 || 12) + (hr < 12 ? " am" : " pm"); }
+  function evening(n0, c0, L) {
+    var box = $("blanket-evening"), list = $("blanket-hourly");
+    box.hidden = true; list.innerHTML = "";
+    if (!ctx || !window.Mane || !window.Mane.hourly) return;
+    var from = window.Mane.barnMs(n0.date, S.blanket_hour, ctx.off), to = window.Mane.barnMs(n0.date, 32, ctx.off);  // to 8 am
+    var rows = window.Mane.hourly(ctx, from, to).filter(function (x) { return x.ms >= from; });
+    if (!rows.length) return;
+    list.innerHTML = window.ManeHourly ? window.ManeHourly.html(rows, { title: "Hourly tonight", mark: rows[0].ms, markLabel: "Blanket time" }) : "";
+    var at = rows[0], low = rows.reduce(function (a, x) { return x.temp < a.temp ? x : a; }, rows[0]);
+    var later = rows.filter(function (x) { return x.hour === (S.blanket_hour < 21 ? 21 : 0); })[0];
+    var steps = ["<b>" + clockOf(S.blanket_hour) + " " + at.temp + "°F</b>"];
+    if (later && later.ms < low.ms) steps.push(later.time.toLowerCase() + " " + later.temp + "°F");
+    if (low !== at) steps.push("low " + low.temp + "°F around " + low.time.toLowerCase());
+    var text = '<i class="bi bi-clock" aria-hidden="true"></i> ' + (at.src === "nws" ? "NWS hourly: " : "") + steps.join(" → ") + ". ";
+    if (c0.level > 0) {
+      var limit = N.MAX_OK[S.coat][c0.level] + S.offset, name = L.name.toLowerCase();
+      var cool = rows.filter(function (x) { return x.temp <= limit; })[0];
+      if (at.temp <= limit)
+        text += "<b>Put it on at " + clockOf(S.blanket_hour) + " as usual.</b> The " + name + " is for the low, and " + at.temp + "°F is still comfortable in it (up to " + limit + "°F).";
+      else if (at.temp <= limit + 5)
+        text += "<b>Fine to put it on at " + clockOf(S.blanket_hour) + ".</b> It's a little warm for a " + name + " at first" + (cool ? ", but it's down to " + limit + "°F by " + cool.time.toLowerCase() : "") + " and keeps cooling toward the low.";
+      else
+        text += "<b>It's warm at " + clockOf(S.blanket_hour) + " for a " + name + "</b> (comfortable up to " + limit + "°F)." +
+          (cool ? " If someone's at the barn later, put it on around " + cool.time.toLowerCase() + ". If " + clockOf(S.blanket_hour) + " is the only visit, it's still the right blanket for the night." : "");
+    }
+    box.innerHTML = text;
+    box.hidden = false;
   }
 
   // A blanket badge on each forecast day (ui.js puts the night's date on each card).
@@ -160,12 +196,13 @@
   function fill(s) {
     form.querySelectorAll('input[name="shelter"]').forEach(function (i) { i.checked = i.value === s.shelter; });
     $("comfort").value = s.offset;
+    $("blanket-hour").value = String(s.blanket_hour);
     preview();
   }
   // Live note while she moves the slider or changes where he spends the night.
   function current() {
     var shelter = form.querySelector('input[name="shelter"]:checked');
-    return clean({ shelter: shelter && shelter.value, offset: $("comfort").value });
+    return clean({ shelter: shelter && shelter.value, offset: $("comfort").value, blanket_hour: $("blanket-hour").value });
   }
   function preview() {
     var c = current();
@@ -190,5 +227,5 @@
     render();
   });
 
-  window.MikeyBlanket = { render: function (b) { bundle = b; render(); } };
+  window.MikeyBlanket = { render: function (b, c) { bundle = b; ctx = c || null; render(); } };
 })();
