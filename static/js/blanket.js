@@ -102,7 +102,7 @@
       n0.snow >= 0.1 ? "Snow <b>" + n0.snow.toFixed(1) + " in</b>" : (n0.precip >= 0.01 ? "Rain <b>" + n0.precip.toFixed(2) + " in</b>" : "Rain/snow chance <b>" + r(n0.precipChance) + "%</b>")
     ].map(function (f) { return "<li>" + f + "</li>"; }).join("");
     var why = c0.why.slice();
-    if (S.offset) why[0] = why[0].replace(/-?\d+°F/, r(c0.eff + S.offset) + "°F") + ", blanketing as if " + S.offset + "° colder";
+    if (S.offset) why[0] = why[0].replace(/-?\d+°F/, r(c0.eff + S.offset) + "°F") + ", with each blanket starting " + S.offset + "° warmer";
     $("blanket-why").innerHTML = "<b>Why:</b> " + why.join("; ").replace("this horse", "Mikey") + ".";
 
     // Do the two forecasts agree? (Neighcast's wording)
