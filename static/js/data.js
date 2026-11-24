@@ -231,9 +231,9 @@
   }
   // NWS rain blocks spread evenly over their hours, plus each hour's whole-block total.
   function rainByHour(G) {
-    var spread = {}, block = {};
-    (G ? G.rain : []).forEach(function (x) { for (var h = 0; h < x.hours; h++) { spread[x.ms + h * 36e5] = x.inches / x.hours; block[x.ms + h * 36e5] = x.inches; } });
-    return { spread: spread, block: block };
+    var spread = {}, block = {}, span = {};
+    (G ? G.rain : []).forEach(function (x) { for (var h = 0; h < x.hours; h++) { spread[x.ms + h * 36e5] = x.inches / x.hours; block[x.ms + h * 36e5] = x.inches; span[x.ms + h * 36e5] = x; } });
+    return { spread: spread, block: block, span: span };
   }
 
   // ---------- Open-Meteo: the four models, by hour ----------
@@ -370,9 +370,14 @@
     var types = {}; hours.forEach(function (ms) { (G.types[ms] || []).forEach(function (t) { if (t !== "Thunderstorms") types[t] = 1; }); });
     var models = Object.keys(ctx.M).map(function (name) {
       return { name: name, temp: hours.map(function (ms) { return (ctx.M[name][ms] || {}).temp; }),
-        pop: showRain ? hours.map(function (ms) { return (ctx.M[name][ms] || {}).pop; }) : null };
+        pop: showRain ? hours.map(function (ms) { return (ctx.M[name][ms] || {}).pop; }) : null,
+        rain: showRain ? hours.map(function (ms) { var r = ctx.M[name][ms]; return r ? r.rain : null; }) : null };
     });
     var sum = function (l) { return l.reduce(function (a, x) { return a + x.amount; }, 0); };
+    // NWS gives rain as 6-hour (sometimes longer) totals; spread each evenly over its hours so it lines up with the models' hourly amounts.
+    var rbh = rainByHour(G), spread = rbh.spread, nwsRain = showRain ? hours.map(function (ms) { return G.temp[ms] == null ? null : (spread[ms] || 0); }) : null;
+    // What the NWS actually forecast for each hour's block, for the chart's hover: "0.02 in, 10 PM – 4 AM".
+    var nwsBlock = showRain ? hours.map(function (ms) { var x = rbh.span[ms]; return x ? x.inches.toFixed(2) + " in, " + clock(x.ms, off) + " – " + clock(x.ms + x.hours * 36e5, off) : null; }) : null;
     return {
       day: day, index: index,
       prev: index > 0 ? { index: index - 1, name: ctx.days[index - 1].name } : null,
@@ -384,7 +389,7 @@
       chart: {
         labels: hours.map(function (ms) { return DOW[barnDate(ms, off).getUTCDay()] + " " + clock(ms, off); }),
         hours: hours.map(function (ms) { return hourOf(ms, off); }),  // hour of day at the barn, for the 3-hour labels
-        nws: { temp: temp, dew: col("dew"), feels: showFeels ? feels : null, wind: col("wind"), gust: col("gust"), sky: col("sky"), rh: col("rh"), pop: showRain ? col("pop") : null },
+        nws: { temp: temp, dew: col("dew"), feels: showFeels ? feels : null, wind: col("wind"), gust: col("gust"), sky: col("sky"), rh: col("rh"), pop: showRain ? col("pop") : null, rain: nwsRain, rainBlock: nwsBlock },
         models: models
       }
     };
@@ -405,10 +410,13 @@
       var pops = names.map(function (n) { return (ctx.M[n][ms] || {}).pop; }).filter(function (v) { return v != null; });
       var skies = names.map(function (n) { return (ctx.M[n][ms] || {}).sky; }).filter(function (v) { return v != null; });
       var pop = src === "nws" ? pick("pop", ms) : (pops.length ? Math.round(avg(pops)) : null);
-      out.push({ ms: ms, hour: hourOf(ms, ctx.off), time: clock(ms, ctx.off), day: DOW[barnDate(ms, ctx.off).getUTCDay()], src: src,
+      var mrain = names.map(function (n) { return (ctx.M[n][ms] || {}).rain; }).filter(function (v) { return v != null; });
+      // Average rainfall this hour across every source that has it (NWS + the four models).
+      var allR = (src === "nws" ? [rbh.spread[ms] || 0] : []).concat(mrain);
+      out.push({ rainAvg: allR.length >= 2 ? avg(allR) : null, rainN: allR.length, ms: ms, hour: hourOf(ms, ctx.off), time: clock(ms, ctx.off), day: DOW[barnDate(ms, ctx.off).getUTCDay()], src: src,
         temp: temp, feels: feels != null && Math.abs(feels - temp) >= 2 ? feels : null, pop: pop,
         wind: pick("wind", ms), gust: pick("gust", ms), sky: src === "nws" ? pick("sky", ms) : (skies.length ? Math.round(avg(skies)) : null),
-        rain: rbh.spread[ms] || 0 });
+        rain: src === "nws" ? (rbh.spread[ms] || 0) : (mrain.length ? avg(mrain) : 0) });
     }
     return out;
   }

@@ -35,7 +35,9 @@ a weather page for Mikey the gray Holsteiner's barn, made for the family.
   temperature at blanket time, 9 PM and the low, and whether the night's blanket is fine to put on
   then (`MAX_OK` + offset, +5°F of slack). The call itself is still Neighcast's, for the whole night.
 - Charts follow weather.gov's hourly graph: the NWS line (models' average past day 7), a time under
-  every third hour and the temperature written above the line at those hours. "Hourly" drop-downs
+  every third hour and the temperature written above the line at those hours. The rain chart shows
+  amounts (inches per hour: NWS 6-hour totals spread evenly as bars, each model a line, totals in the
+  key matching the compare table); chance of rain lives on the week cards and in the hourly lists. "Hourly" drop-downs
   (blanket card from blanket time to 8 AM, and each day popup) list one row per hour via `Mane.hourly`.
 - Personal site: no outbound links beyond the footer's data credits; `noindex` keeps it out of search.
 - Naming: lowercase words joined by underscores. Design: gateopenerguide palette (navy +
