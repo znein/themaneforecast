@@ -154,7 +154,7 @@
       (c.sources.some(function (s) { return s.partial; }) ? '<p class="footnote">* Partial: that source\'s forecast doesn\'t cover every hour of this day.</p>' : "") + "</section>" +
       '<div class="nws-text">' + d.parts.map(function (p) { return "<p><b>" + esc(p.name) + ":</b> " + esc(p.text) + "</p>"; }).join("") + "</div>" +
       '<section class="dd-section"><h3>Temperature <span>' + (hasNws(x.chart) ? "National Weather Service" : "average of the four models") + " · °F" + (x.showFeels ? " · feels like (dashed grey)" : "") + '</span></h3><div class="chart-box"><canvas data-chart="temp" role="img" aria-label="Hourly temperature, numbers every 3 hours"></canvas></div>' +
-        hourlyHTML(M.hourly(ctx, d.startMs, d.endMs), { title: "Hourly" }) + "</section>" +
+        hourlyHTML(M.hourly(ctx, d.startMs, d.endMs), { title: "Hourly", totalLabel: "Rain Daily Total", skipLast: true }) + "</section>" +
       (x.showRain ? '<section class="dd-section"><h3>Rain <span>inches each hour · NWS bars, models lines · total in the key</span></h3><div class="chart-box"><canvas data-chart="rain" role="img" aria-label="Hourly chance of rain from every source"></canvas></div>' +
         (x.rainBlocks.length ? '<ul class="amounts" aria-label="NWS rain amounts">' + amounts(x.rainBlocks, "", 2) + "</ul>" : "") + "</section>" : "") +
       (x.snow.length || x.ice.length ? '<section class="dd-section"><h3>Snow and ice <span>NWS</span></h3><ul class="amounts">' + amounts(x.snow, " snow", 1) + amounts(x.ice, " ice", 2) + "</ul></section>" : "") +
@@ -171,11 +171,27 @@
     if (x.sky >= 50) return night ? "cloud-moon" : "cloud-sun";
     return night ? "moon-stars" : "sun";
   }
+  function inches(v) { return v == null ? "–" : v <= 0 ? "0.00 in" : v < 0.01 ? "<0.01 in" : (+v).toFixed(2) + " in"; }
+  // "Day total: NWS 0.38 in · average of 5 0.34 in": the hourly amounts added up. A day popup leaves out
+  // its closing hour (6 AM the next day) so the totals match the "How the sources compare" table.
+  function totalHTML(rows, opts) {
+    var use = opts.skipLast ? rows.slice(0, -1) : rows;
+    var avgTotal = use.reduce(function (s, x) { return s + (x.rainAvg != null ? x.rainAvg : x.rain || 0); }, 0);
+    if (avgTotal < 0.005 && !use.some(function (x) { return x.rain >= 0.005; })) return "";
+    var allNws = use.every(function (x) { return x.src === "nws"; });
+    var nwsTotal = use.reduce(function (s, x) { return s + (x.src === "nws" ? x.rain || 0 : 0); }, 0);
+    var n = Math.max.apply(null, use.map(function (x) { return x.rainN || 0; }));
+    return '<p class="hour-total"><span>' + esc(opts.totalLabel || "Total") + "</span>" +
+      (allNws ? '<span class="k-nws">NWS ' + inches(nwsTotal) + "</span>" : "") +
+      '<span class="k-mix" title="Average of all ' + n + ' sources">AVG ' + inches(avgTotal) + "</span></p>";
+  }
   function hourlyHTML(rows, opts) {
     opts = opts || {};
     if (!rows.length) return "";
     var models = rows.some(function (x) { return x.src === "models"; });
     return '<details class="hourly"' + (opts.open ? " open" : "") + '><summary><span>' + esc(opts.title || "Hourly") + '</span><i class="bi bi-chevron-down" aria-hidden="true"></i></summary>' +
+      (rows.some(function (x) { return x.rainAvg >= 0.001; }) ? '<p class="hour-key">Rain: <span class="k-nws">blue</span> NWS · <span class="k-mix">gold</span> average of all ' + Math.max.apply(null, rows.map(function (x) { return x.rainN; })) + " sources</p>" : "") +
+      totalHTML(rows, opts) +
       '<ol class="hour-list">' + rows.map(function (x, i) {
         var mark = opts.mark === x.ms, newDay = i > 0 && x.hour === 0;
         return '<li class="hour' + (mark ? " is-mark" : "") + (newDay ? " is-new-day" : "") + '">' +
@@ -183,7 +199,9 @@
           '<i class="h-icon bi bi-' + hourIcon(x) + '" aria-hidden="true"></i>' +
           '<span class="h-temp">' + x.temp + "°</span>" +
           '<span class="h-feels">' + (x.feels != null ? "feels " + x.feels + "°" : "") + "</span>" +
-          '<span class="h-pop">' + (x.pop != null && x.pop >= 10 ? '<i class="bi bi-droplet-fill" aria-hidden="true"></i>' + x.pop + "%" : "") + "</span>" +
+          '<span class="h-pop">' + (x.pop != null && x.pop >= 10 ? '<i class="bi bi-droplet-fill" aria-hidden="true"></i>' + x.pop + "%" : "") +
+            (x.rain >= 0.001 ? '<small class="h-rain">' + inches(x.rain).replace(" in", '"') + "</small>" : "") + "</span>" +
+          '<span class="h-avg"' + (x.rainAvg != null ? ' title="Average rain of all ' + x.rainN + ' sources this hour"' : "") + ">" + (x.rainAvg >= 0.001 ? inches(x.rainAvg).replace(" in", '"') : "") + "</span>" +
           '<span class="h-wind">' + (x.wind != null ? x.wind + " mph" + (x.gust != null && x.gust >= x.wind + 5 ? ' <small>gusts ' + x.gust + "</small>" : "") : "") + "</span>" +
           (mark && opts.markLabel ? '<span class="h-mark">' + esc(opts.markLabel) + "</span>" : "") + "</li>";
       }).join("") + "</ol>" +
@@ -223,7 +241,11 @@
         plugins: {
           legend: { display: datasets.length > 1, position: "bottom", labels: { color: TEXT, usePointStyle: true, boxWidth: 8, boxHeight: 8, font: { size: 11 }, sort: function (a, b) { return a.datasetIndex - b.datasetIndex; } } },
           tooltip: { backgroundColor: "rgba(11, 15, 21, 0.94)", borderColor: "#2a3a52", borderWidth: 1, padding: 10, cornerRadius: 10,
-            callbacks: { label: function (i) { return " " + i.dataset.label.split(" · ")[0] + ": " + (i.dataset.unit === " in" ? (+i.raw).toFixed(2) : i.formattedValue) + (i.dataset.unit || ""); } } }
+            callbacks: { label: function (i) {
+              var name = " " + i.dataset.label.split(" · ")[0] + ": ";
+              if (i.dataset.blocks) return name + (i.dataset.blocks[i.dataIndex] || "no rain");  // NWS: its 6-hour amount, as forecast
+              return name + (i.dataset.unit === " in" ? inches(i.raw) : i.formattedValue + (i.dataset.unit || ""));
+            } } }
         },
         scales: {
           x: { grid: { color: function (c) { return third(c.index) ? GRID : "transparent"; } },
@@ -262,7 +284,7 @@
       var named = function (n, a) { return n + " · " + total(a).toFixed(2) + " in"; };
       var rain = [];
       if (d.nws.rain.some(function (v) { return v != null; }))
-        rain.push({ type: "bar", label: named("NWS", d.nws.rain), data: d.nws.rain, backgroundColor: rgba(SOURCE_COLORS[0], 0.55), unit: " in", order: 2, barPercentage: 1, categoryPercentage: 1 });  // NWS first in the key, as in the table
+        rain.push({ type: "bar", label: named("NWS", d.nws.rain), data: d.nws.rain, backgroundColor: rgba(SOURCE_COLORS[0], 0.55), unit: " in", order: 2, barPercentage: 1, categoryPercentage: 1, blocks: d.nws.rainBlock });  // NWS first in the key, as in the table
       d.models.forEach(function (m, i) { if (m.rain) rain.push(line(named(m.name, m.rain), m.rain, SOURCE_COLORS[i + 1], { borderWidth: 1.6, unit: " in", order: 1, cubicInterpolationMode: "monotone" })); });
       chart("rain", L, rain, { min: 0, suggestedMax: 0.05, ticks: { color: TEXT, maxTicksLimit: 5, callback: function (v) { return (+v).toFixed(2) + '"'; } } });
     }

@@ -153,7 +153,7 @@
     var from = window.Mane.barnMs(n0.date, S.blanket_hour, ctx.off), to = window.Mane.barnMs(n0.date, 32, ctx.off);  // to 8 am
     var rows = window.Mane.hourly(ctx, from, to).filter(function (x) { return x.ms >= from; });
     if (!rows.length) return;
-    list.innerHTML = window.ManeHourly ? window.ManeHourly.html(rows, { title: "Hourly tonight", mark: rows[0].ms, markLabel: "Blanket time" }) : "";
+    list.innerHTML = window.ManeHourly ? window.ManeHourly.html(rows, { title: "Hourly tonight", mark: rows[0].ms, markLabel: "Blanket time", totalLabel: "Rain Total Tonight, " + clockOf(S.blanket_hour) + " to 8 am" }) : "";
     var at = rows[0], low = rows.reduce(function (a, x) { return x.temp < a.temp ? x : a; }, rows[0]);
     var later = rows.filter(function (x) { return x.hour === (S.blanket_hour < 21 ? 21 : 0); })[0];
     var steps = ["<b>" + clockOf(S.blanket_hour) + " " + at.temp + "°F</b>"];
